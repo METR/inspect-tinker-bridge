@@ -1,0 +1,54 @@
+[project]
+name = "inspect-tinker-bridge"
+version = "0.1.0"
+description = "Inspect tasks <> Tinker RL envs"
+readme = "README.md"
+authors = [
+    { name = "Neev Parikh", email = "neev@metr.org" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "inspect-ai~=0.3.158",
+    "inspect-evals>=0.3.102",
+    "datasets>=3.1.0",
+    "tinker>=0.7.0",
+    "tinker-cookbook>=0.1.0",
+]
+
+[project.scripts]
+inspect-tinker-bridge = "inspect_tinker_bridge:main"
+
+[build-system]
+requires = ["uv_build>=0.9.16,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.35.0",
+    "pdbpp>=0.11.7",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "pytest-mock>=3.15.1",
+    "ruff>=0.14.8",
+]
+
+[tool.basedpyright]
+ignore = ["**/*.ipynb"]
+typeCheckingMode = "strict"
+useLibraryCodeForTypes = true
+pythonVersion = "3.12"
+reportMissingTypeStubs = false
+reportMissingImports = "error"
+reportUnknownMemberType = "warning"
+reportUnknownVariableType = "warning"
+reportUnknownArgumentType = "warning"
+reportAny = false # any is worth the convenience sometimes
+reportExplicitAny = false
+reportPrivateUsage = false # worth it for testing private functions
+allowedUntypedLibraries = [
+  "datasets",
+  "tqdm",
+  "statsmodels",
+  "timeout_decorator",
+]
+
