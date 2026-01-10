@@ -7,6 +7,7 @@ Provides:
 - InspectRLDataset: Produces batches of EnvGroupBuilders
 """
 
+import json
 import logging
 import math
 from dataclasses import dataclass
@@ -180,19 +181,23 @@ class InspectEnv(types.Env):
                         name="submit",
                     )
                 )
-            elif tool_name == "bash":
-                # Execute bash command in sandbox
+            elif tool_name in ("bash", "python"):
+                # Execute command in sandbox
                 args = tc.function.arguments if hasattr(tc, "function") else "{}"
-                import json
-
                 args_dict = json.loads(args) if isinstance(args, str) else args
-                command = args_dict.get("command", "")
+
+                if tool_name == "bash":
+                    command = args_dict.get("command", "")
+                    cmd = ["bash", "-c", command]
+                else:
+                    code = args_dict.get("code", "")
+                    cmd = ["python", "-c", code]
 
                 if self.sandbox_instance:
                     exec_result = await sandbox_module.exec_in_sandbox(
                         self.sandbox_instance.environments,
-                        ["bash", "-c", command],
-                        timeout=30,
+                        cmd,
+                        timeout=60,
                     )
                     output = exec_result.stdout or ""
                     if exec_result.stderr:
@@ -207,7 +212,7 @@ class InspectEnv(types.Env):
                         role="tool",
                         content=output,
                         tool_call_id=tool_id or "",
-                        name="bash",
+                        name=tool_name,
                     )
                 )
             else:

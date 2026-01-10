@@ -25,22 +25,20 @@ from inspect_ai.util._sandbox.registry import registry_find_sandboxenv
 
 logger = logging.getLogger(__name__)
 
-# Track whether Docker context has been initialized
-_docker_context_initialized = False
-
 
 def _ensure_docker_context() -> None:
-    """Initialize Docker-specific context variables if not already done."""
-    global _docker_context_initialized
-    if _docker_context_initialized:
-        return
+    """
+    Initialize Docker-specific context variables.
 
+    Must be called in the same context where sandboxes will be created.
+    We call this every time because ContextVars don't persist across
+    different async contexts in some execution environments.
+    """
     try:
         logger.debug("Initializing Docker sandbox context")
         from inspect_ai.util._sandbox.docker.cleanup import project_cleanup_startup
 
         project_cleanup_startup()
-        _docker_context_initialized = True
         logger.info("Docker sandbox context initialized successfully")
     except ImportError:
         logger.warning("Docker sandbox not available (import failed)")

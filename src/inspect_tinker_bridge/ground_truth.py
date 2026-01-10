@@ -15,7 +15,15 @@ from inspect_ai.scorer import Target
 from inspect_ai.solver import TaskState
 
 # Solvers that require model inference and should stop execution
-GENERATION_SOLVERS = {"generate", "self_critique"}
+# This includes both simple generation and agentic solvers
+GENERATION_SOLVERS = {
+    "generate",
+    "self_critique",
+    "basic_agent",
+    "basic_agent_loop",
+    "submit_tool",
+    "react",
+}
 
 
 async def get_ground_truth_messages(task: Task, sample: Sample) -> list[ChatMessage]:
