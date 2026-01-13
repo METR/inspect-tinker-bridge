@@ -5,11 +5,10 @@ This module provides utilities to create and manage sandbox environments
 that can be used during reward computation in RL training.
 """
 
-import json
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, AsyncIterator
 
 from inspect_ai._eval.task.sandbox import read_sandboxenv_file, resolve_sample_files
 from inspect_ai.util import ExecResult
@@ -22,6 +21,8 @@ from inspect_ai.util._sandbox.context import (
 )
 from inspect_ai.util._sandbox.environment import SandboxEnvironment
 from inspect_ai.util._sandbox.registry import registry_find_sandboxenv
+
+from inspect_tinker_bridge.types import SampleInfoDict, parse_metadata_json
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class SandboxInstance:
 
 
 async def create_sandbox_for_sample(
-    sample_info: dict[str, Any],
+    sample_info: SampleInfoDict,
     task_name: str,
     sandbox_config: SandboxConfig,
 ) -> SandboxInstance:
@@ -102,7 +103,7 @@ async def create_sandbox_for_sample(
     sandbox_cls = registry_find_sandboxenv(sandbox_config.sandbox_type)
 
     # Resolve files using Inspect's resolution (handles data URIs, HTTP URLs, file paths)
-    files_raw = sample_info.get("inspect_files") or {}
+    files_raw: dict[str, str] = sample_info.get("inspect_files") or {}
     resolved_files = resolve_sample_files(files_raw)
     files_bytes: dict[str, bytes] = {}
     for path, contents in resolved_files.items():
@@ -115,12 +116,8 @@ async def create_sandbox_for_sample(
         setup_bytes = await read_sandboxenv_file(setup)
 
     # Get metadata (JSON-serialized in dataset.py for pyarrow compatibility)
-    metadata_raw = sample_info.get("inspect_metadata") or {}
-    metadata: dict[str, Any] = (
-        json.loads(metadata_raw)
-        if isinstance(metadata_raw, str)
-        else dict(metadata_raw)
-    )
+    metadata_raw = sample_info.get("inspect_metadata", "{}")
+    metadata = parse_metadata_json(metadata_raw)
 
     # Initialize sandbox environments
     logger.debug(f"Initializing sandbox environments for sample {sample_id}")

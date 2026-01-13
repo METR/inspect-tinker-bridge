@@ -1,23 +1,23 @@
 """Tests for env module."""
 
-from typing import Any
-
 import pytest
 from datasets import Dataset as HFDataset
 from inspect_ai.scorer import Scorer
 from pytest_mock import MockerFixture
+from tinker_cookbook.renderers import Message
 
 from inspect_tinker_bridge import env
+from inspect_tinker_bridge.types import MessageDict, SampleInfoDict
 
 
 class FakeRenderer:
     """Fake Renderer for testing without tokenizer."""
 
-    def build_generation_prompt(self, messages: list[dict[str, Any]]) -> object:
+    def build_generation_prompt(self, messages: list[Message]) -> object:
         """Return a fake ModelInput."""
 
         class FakeModelInput:
-            def __init__(self, messages: list[dict[str, Any]]):
+            def __init__(self, messages: list[Message]) -> None:
                 self.messages = messages
 
         return FakeModelInput(messages)
@@ -25,15 +25,15 @@ class FakeRenderer:
     def get_stop_sequences(self) -> list[str]:
         return ["\n\nUser:"]
 
-    def parse_response(self, action: list[int]) -> tuple[dict[str, str], bool]:
-        return {"role": "assistant", "content": "4"}, True
+    def parse_response(self, action: list[int]) -> tuple[Message, bool]:
+        return Message(role="assistant", content="4"), True
 
 
 class TestInspectEnv:
     """Tests for InspectEnv class."""
 
     def test_init_stores_parameters(
-        self, sample_info: dict[str, object], prompt_messages: list[dict[str, str]]
+        self, sample_info: SampleInfoDict, prompt_messages: list[MessageDict]
     ) -> None:
         """Test that __init__ stores all parameters correctly."""
         renderer = FakeRenderer()
@@ -61,7 +61,7 @@ class TestInspectEnv:
 
     @pytest.mark.asyncio
     async def test_initial_observation_builds_prompt(
-        self, sample_info: dict[str, object], prompt_messages: list[dict[str, str]]
+        self, sample_info: SampleInfoDict, prompt_messages: list[MessageDict]
     ) -> None:
         """Test that initial_observation returns tokenized prompt."""
         renderer = FakeRenderer()
@@ -84,8 +84,8 @@ class TestInspectEnv:
     @pytest.mark.asyncio
     async def test_single_turn_ends_after_one_step(
         self,
-        sample_info: dict[str, object],
-        prompt_messages: list[dict[str, str]],
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
         mocker: MockerFixture,
     ) -> None:
         """Test that single-turn env ends after one step."""
