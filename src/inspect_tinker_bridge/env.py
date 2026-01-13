@@ -34,6 +34,13 @@ from inspect_tinker_bridge.types import (
 logger = logging.getLogger(__name__)
 
 
+def _tool_error_message(tool_id: str, tool_name: str, error: str) -> Message:
+    """Create a tool error message."""
+    return Message(
+        role="tool", content=f"Error: {error}", tool_call_id=tool_id, name=tool_name
+    )
+
+
 class InspectEnv(types.Env):
     """
     Tinker Env wrapping a single Inspect sample.
@@ -210,11 +217,8 @@ class InspectEnv(types.Env):
                     args_dict: dict[str, object] = json.loads(args)
                 except json.JSONDecodeError as e:
                     results.append(
-                        Message(
-                            role="tool",
-                            content=f"Error: Invalid JSON in tool arguments: {e}",
-                            tool_call_id=tool_id,
-                            name=tool_name,
+                        _tool_error_message(
+                            tool_id, tool_name, f"Invalid JSON in tool arguments: {e}"
                         )
                     )
                     continue
@@ -223,11 +227,10 @@ class InspectEnv(types.Env):
                 if tool_name == "bash":
                     if "command" not in args_dict:
                         results.append(
-                            Message(
-                                role="tool",
-                                content="Error: missing 'command' argument for bash tool",
-                                tool_call_id=tool_id,
-                                name=tool_name,
+                            _tool_error_message(
+                                tool_id,
+                                tool_name,
+                                "missing 'command' argument for bash tool",
                             )
                         )
                         continue
@@ -235,11 +238,10 @@ class InspectEnv(types.Env):
                 else:
                     if "code" not in args_dict:
                         results.append(
-                            Message(
-                                role="tool",
-                                content="Error: missing 'code' argument for python tool",
-                                tool_call_id=tool_id,
-                                name=tool_name,
+                            _tool_error_message(
+                                tool_id,
+                                tool_name,
+                                "missing 'code' argument for python tool",
                             )
                         )
                         continue
@@ -270,11 +272,8 @@ class InspectEnv(types.Env):
             else:
                 # Unknown tool
                 results.append(
-                    Message(
-                        role="tool",
-                        content=f"Unknown tool: {tool_name}",
-                        tool_call_id=tool_id,
-                        name=tool_name,
+                    _tool_error_message(
+                        tool_id, tool_name, f"Unknown tool: {tool_name}"
                     )
                 )
 
@@ -291,7 +290,7 @@ class InspectEnv(types.Env):
         """Convert a dict to a Tinker Message."""
         msg = Message(
             role=d["role"],
-            content=d.get("content", ""),
+            content=d["content"],
         )
         # Copy tool_calls if present (assistant messages)
         if "tool_calls" in d:
@@ -317,7 +316,7 @@ class InspectEnv(types.Env):
         """Convert a Tinker Message to a dict."""
         result = MessageDict(
             role=m["role"],  # type: ignore[typeddict-item]  # Tinker Role is compatible
-            content=m.get("content", ""),
+            content=m["content"],
         )
         if "tool_calls" in m:
             # Convert Tinker ToolCall to dict format

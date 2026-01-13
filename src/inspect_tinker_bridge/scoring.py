@@ -225,7 +225,7 @@ def _build_inspect_messages(messages: list[MessageDict]) -> list[ChatMessage]:
 
     for msg in messages:
         role = msg["role"]
-        content = msg.get("content", "")
+        content = msg["content"]
 
         if role == "system":
             result.append(ChatMessageSystem(content=content))
@@ -267,7 +267,7 @@ def _build_model_output(conversation: list[MessageDict]) -> ModelOutput:
                 continue
             return ModelOutput.from_content(
                 model=str(utils.BRIDGE_MODEL_NAME),
-                content=msg.get("content", ""),
+                content=msg["content"],
             )
     # No assistant message found - return empty
     return ModelOutput.from_content(model=str(utils.BRIDGE_MODEL_NAME), content="")
