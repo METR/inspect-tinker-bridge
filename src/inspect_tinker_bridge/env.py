@@ -10,21 +10,35 @@ Provides:
 import json
 import logging
 import math
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Literal, Sequence
+from typing import Literal, cast
 
 import tinker
 from datasets import Dataset as HFDataset
 from inspect_ai.scorer import Scorer
 from tinker_cookbook.completers import StopCondition
 from tinker_cookbook.rl import types
-from tinker_cookbook.renderers import Message, Renderer
+from tinker_cookbook.renderers import Message, Renderer, ToolCall as TinkerToolCall
 
 from inspect_tinker_bridge import sandbox as sandbox_module
 from inspect_tinker_bridge import scoring
+from inspect_tinker_bridge.types import (
+    DatasetRowDict,
+    MessageDict,
+    SampleInfoDict,
+    ToolCallDict,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _tool_error_message(tool_id: str, tool_name: str, error: str) -> Message:
+    """Create a tool error message."""
+    return Message(
+        role="tool", content=f"Error: {error}", tool_call_id=tool_id, name=tool_name
+    )
 
 
 class InspectEnv(types.Env):
@@ -39,8 +53,8 @@ class InspectEnv(types.Env):
 
     def __init__(
         self,
-        sample_info: dict[str, Any],
-        prompt_messages: list[dict[str, Any]],
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
         answer: str | None,
         renderer: Renderer,
         scorers: list[Scorer],
@@ -75,52 +89,67 @@ class InspectEnv(types.Env):
                 self.sample_info, self.task_name, self.sandbox_config
             )
 
-        # Convert prompt messages to Tinker format
-        self.conversation = [self._dict_to_message(m) for m in self.prompt_messages]
+        try:
+            # Convert prompt messages to Tinker format
+            self.conversation = [self._dict_to_message(m) for m in self.prompt_messages]
 
-        return (
-            self.renderer.build_generation_prompt(self.conversation),
-            self.renderer.get_stop_sequences(),
-        )
+            return (
+                self.renderer.build_generation_prompt(self.conversation),
+                self.renderer.get_stop_sequences(),
+            )
+        except Exception:
+            # Cleanup sandbox on failure to prevent resource leak
+            await self._cleanup()
+            raise
 
     async def step(self, action: types.Action) -> types.StepResult:
         """Process action, manage sandbox, return reward when done."""
-        # Parse the response
-        message, valid = self.renderer.parse_response(action)
-        self.conversation.append(message)
-        self.current_turn += 1
+        try:
+            # Parse the response
+            message, valid = self.renderer.parse_response(action)
+            self.conversation.append(message)
+            self.current_turn += 1
 
-        # Check for episode end conditions
-        episode_done = self._should_end_episode(message)
+            # Check for episode end conditions
+            episode_done = self._should_end_episode(message)
 
-        if episode_done:
-            reward, individual_rewards = await self._compute_reward()
-            await self._cleanup()
+            if episode_done:
+                reward, individual_rewards = await self._compute_reward()
+                await self._cleanup()
+                return types.StepResult(
+                    reward=reward,
+                    episode_done=True,
+                    next_observation=tinker.ModelInput.empty(),
+                    next_stop_condition=self.renderer.get_stop_sequences(),
+                    metrics={
+                        "correct": float(reward > 0),
+                        "format_valid": float(valid),
+                        **individual_rewards,
+                    },
+                )
+
+            # Multi-turn: handle tool calls
+            tool_calls: list[TinkerToolCall] | None = message.get("tool_calls")
+            if self.env_type == "multi_turn" and tool_calls:
+                tool_results = await self._execute_tools(tool_calls)
+                self.conversation.extend(tool_results)
+
             return types.StepResult(
-                reward=reward,
-                episode_done=True,
-                next_observation=tinker.ModelInput.empty(),
+                reward=0.0,
+                episode_done=False,
+                next_observation=self.renderer.build_generation_prompt(
+                    self.conversation
+                ),
                 next_stop_condition=self.renderer.get_stop_sequences(),
-                metrics={
-                    "correct": float(reward > 0),
-                    "format_valid": float(valid),
-                    **{k: v for k, v in individual_rewards.items()},
-                },
+                metrics={"format_valid": float(valid)},
             )
-
-        # Multi-turn: handle tool calls
-        tool_calls = message.get("tool_calls")
-        if self.env_type == "multi_turn" and tool_calls:
-            tool_results = await self._execute_tools(tool_calls)
-            self.conversation.extend(tool_results)
-
-        return types.StepResult(
-            reward=0.0,
-            episode_done=False,
-            next_observation=self.renderer.build_generation_prompt(self.conversation),
-            next_stop_condition=self.renderer.get_stop_sequences(),
-            metrics={"format_valid": float(valid)},
-        )
+        except Exception:
+            # Cleanup on exception, but don't let cleanup errors mask the original
+            try:
+                await self._cleanup()
+            except Exception:
+                logger.exception("Error during cleanup after exception in step()")
+            raise
 
     def _should_end_episode(self, message: Message) -> bool:
         """Determine if the episode should end."""
@@ -163,13 +192,13 @@ class InspectEnv(types.Env):
             sandbox_envs=sandbox_envs,
         )
 
-    async def _execute_tools(self, tool_calls: list[Any]) -> list[Message]:
+    async def _execute_tools(self, tool_calls: list[TinkerToolCall]) -> list[Message]:
         """Execute tool calls and return results."""
         results: list[Message] = []
 
         for tc in tool_calls:
-            tool_name = tc.function.name if hasattr(tc, "function") else str(tc)
-            tool_id = tc.id if hasattr(tc, "id") else None
+            tool_name = tc.function.name
+            tool_id = tc.id or ""
 
             if tool_name == "submit":
                 self._submitted = True
@@ -177,21 +206,46 @@ class InspectEnv(types.Env):
                     Message(
                         role="tool",
                         content="Task submitted. Rollout complete.",
-                        tool_call_id=tool_id or "",
+                        tool_call_id=tool_id,
                         name="submit",
                     )
                 )
             elif tool_name in ("bash", "python"):
                 # Execute command in sandbox
-                args = tc.function.arguments if hasattr(tc, "function") else "{}"
-                args_dict = json.loads(args) if isinstance(args, str) else args
+                args = tc.function.arguments
+                try:
+                    args_dict: dict[str, object] = json.loads(args)
+                except json.JSONDecodeError as e:
+                    results.append(
+                        _tool_error_message(
+                            tool_id, tool_name, f"Invalid JSON in tool arguments: {e}"
+                        )
+                    )
+                    continue
 
+                cmd: list[str]
                 if tool_name == "bash":
-                    command = args_dict.get("command", "")
-                    cmd = ["bash", "-c", command]
+                    if "command" not in args_dict:
+                        results.append(
+                            _tool_error_message(
+                                tool_id,
+                                tool_name,
+                                "missing 'command' argument for bash tool",
+                            )
+                        )
+                        continue
+                    cmd = ["bash", "-c", str(args_dict["command"])]
                 else:
-                    code = args_dict.get("code", "")
-                    cmd = ["python", "-c", code]
+                    if "code" not in args_dict:
+                        results.append(
+                            _tool_error_message(
+                                tool_id,
+                                tool_name,
+                                "missing 'code' argument for python tool",
+                            )
+                        )
+                        continue
+                    cmd = ["python", "-c", str(args_dict["code"])]
 
                 if self.sandbox_instance:
                     exec_result = await sandbox_module.exec_in_sandbox(
@@ -211,18 +265,15 @@ class InspectEnv(types.Env):
                     Message(
                         role="tool",
                         content=output,
-                        tool_call_id=tool_id or "",
+                        tool_call_id=tool_id,
                         name=tool_name,
                     )
                 )
             else:
                 # Unknown tool
                 results.append(
-                    Message(
-                        role="tool",
-                        content=f"Unknown tool: {tool_name}",
-                        tool_call_id=tool_id or "",
-                        name=tool_name,
+                    _tool_error_message(
+                        tool_id, tool_name, f"Unknown tool: {tool_name}"
                     )
                 )
 
@@ -235,33 +286,52 @@ class InspectEnv(types.Env):
             self.sandbox_instance = None
 
     @staticmethod
-    def _dict_to_message(d: dict[str, Any]) -> Message:
+    def _dict_to_message(d: MessageDict) -> Message:
         """Convert a dict to a Tinker Message."""
-        return Message(
+        msg = Message(
             role=d["role"],
-            content=d.get("content", ""),
+            content=d["content"],
         )
+        # Copy tool_calls if present (assistant messages)
+        if "tool_calls" in d:
+            msg["tool_calls"] = [
+                TinkerToolCall(
+                    function=TinkerToolCall.FunctionBody(
+                        name=tc["function"]["name"],
+                        arguments=tc["function"]["arguments"],
+                    ),
+                    id=tc["id"],
+                )
+                for tc in d["tool_calls"]
+            ]
+        # Copy tool message fields if present
+        if "tool_call_id" in d:
+            msg["tool_call_id"] = d["tool_call_id"]
+        if "name" in d:
+            msg["name"] = d["name"]
+        return msg
 
     @staticmethod
-    def _message_to_dict(m: Message) -> dict[str, Any]:
+    def _message_to_dict(m: Message) -> MessageDict:
         """Convert a Tinker Message to a dict."""
-        result: dict[str, Any] = {
-            "role": m["role"],
-            "content": m.get("content", ""),
-        }
+        result = MessageDict(
+            role=m["role"],  # type: ignore[typeddict-item]  # Tinker Role is compatible
+            content=m["content"],
+        )
         if "tool_calls" in m:
             # Convert Tinker ToolCall to dict format
-            result["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
+            tool_call_dicts: list[ToolCallDict] = [
+                ToolCallDict(
+                    id=tc.id or "",
+                    type="function",
+                    function={
                         "name": tc.function.name,
                         "arguments": tc.function.arguments,
                     },
-                }
+                )
                 for tc in m["tool_calls"]
             ]
+            result["tool_calls"] = tool_call_dicts
         if "tool_call_id" in m:
             result["tool_call_id"] = m["tool_call_id"]
         if "name" in m:
@@ -307,6 +377,8 @@ class InspectRLDataset(types.RLDataset):
         batch_size: int = 1,
         task_name: str = "inspect",
     ):
+        if batch_size < 1:
+            raise ValueError(f"batch_size must be >= 1, got {batch_size}")
         self.hf_dataset = hf_dataset
         self.renderer = renderer
         self.scorers = scorers
@@ -317,7 +389,7 @@ class InspectRLDataset(types.RLDataset):
         self.batch_size = batch_size
         self.task_name = task_name
 
-    def _make_env_group_builder(self, row: dict[str, Any]) -> InspectEnvGroupBuilder:
+    def _make_env_group_builder(self, row: DatasetRowDict) -> InspectEnvGroupBuilder:
         """Convert one HF row to an EnvGroupBuilder."""
         return InspectEnvGroupBuilder(
             env_thunk=partial(
@@ -337,10 +409,14 @@ class InspectRLDataset(types.RLDataset):
         )
 
     def get_batch(self, index: int) -> Sequence[types.EnvGroupBuilder]:
+        if index < 0 or index >= len(self):
+            raise IndexError(f"Batch index {index} out of range [0, {len(self)})")
         start = index * self.batch_size
         end = min(start + self.batch_size, len(self.hf_dataset))
+        # HFDataset is untyped; cast rows to our expected type
         return [
-            self._make_env_group_builder(self.hf_dataset[i]) for i in range(start, end)
+            self._make_env_group_builder(cast(DatasetRowDict, self.hf_dataset[i]))
+            for i in range(start, end)
         ]
 
     def __len__(self) -> int:

@@ -9,6 +9,8 @@ from inspect_ai.model import ChatMessageUser
 from inspect_ai.scorer import match
 from inspect_ai.solver import generate
 
+from inspect_tinker_bridge.types import MessageDict, SampleInfoDict
+
 
 @pytest.fixture
 def simple_sample() -> Sample:
@@ -55,22 +57,22 @@ def task_with_sandbox(simple_sample: Sample) -> Task:
 
 
 @pytest.fixture
-def sample_info() -> dict[str, object]:
+def sample_info() -> SampleInfoDict:
     """Sample info dict as stored in HF dataset."""
-    return {
-        "inspect_sample_id": "test_sample_1",
-        "inspect_input_raw": "What is 2 + 2?",
-        "inspect_target_raw": "4",
-        "inspect_choices": None,
-        "inspect_metadata": '{"difficulty": "easy"}',
-        "inspect_sandbox": None,
-        "inspect_files": None,
-        "inspect_setup": None,
-        "inspect_task_name": "test_task",
-    }
+    return SampleInfoDict(
+        inspect_sample_id="test_sample_1",
+        inspect_input_raw="What is 2 + 2?",
+        inspect_target_raw="4",
+        inspect_choices=None,
+        inspect_metadata='{"difficulty": "easy"}',
+        inspect_sandbox=None,
+        inspect_files=None,
+        inspect_setup=None,
+        inspect_task_name="test_task",
+    )
 
 
 @pytest.fixture
-def prompt_messages() -> list[dict[str, str]]:
+def prompt_messages() -> list[MessageDict]:
     """Prompt messages in dict format."""
-    return [{"role": "user", "content": "What is 2 + 2?"}]
+    return [MessageDict(role="user", content="What is 2 + 2?")]

@@ -3,7 +3,8 @@ Main loader: Convert Inspect tasks to Tinker RLDataset.
 """
 
 import logging
-from typing import Any, Callable, Literal
+from collections.abc import Callable
+from typing import Literal
 
 from inspect_ai import Task
 from tinker_cookbook.renderers import Renderer
@@ -29,7 +30,7 @@ def load_environment(
     sandbox_config: str | None = None,
     submit_instruction: str
     | None = "You must call submit() when you are done to complete the task.",
-    **task_kwargs: Any,
+    **task_kwargs: object,
 ) -> InspectRLDataset:
     """
     Load an Inspect task and convert it to a Tinker RLDataset.

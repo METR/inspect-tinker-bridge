@@ -71,8 +71,10 @@ class TestChatMessageToDict:
 
         assert result["role"] == "assistant"
         assert result["content"] == "Running command."
-        assert len(result["tool_calls"]) == 1
-        tc = result["tool_calls"][0]
+        tool_calls = result.get("tool_calls")
+        assert tool_calls is not None
+        assert len(tool_calls) == 1
+        tc = tool_calls[0]
         assert tc["id"] == "call_123"
         assert tc["function"]["name"] == "bash"
         # arguments converted to str representation
@@ -89,8 +91,8 @@ class TestChatMessageToDict:
 
         assert result["role"] == "tool"
         assert result["content"] == "hello\n"
-        assert result["tool_call_id"] == "call_123"
-        assert result["name"] == "bash"
+        assert result.get("tool_call_id") == "call_123"
+        assert result.get("name") == "bash"
 
 
 class TestChatMessageToTinker:

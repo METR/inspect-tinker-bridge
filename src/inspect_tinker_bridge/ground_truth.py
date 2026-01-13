@@ -6,13 +6,15 @@ that would be presented to a model during evaluation, by running the
 solver chain without model inference.
 """
 
-from typing import Any
+from typing import Literal
 
 from inspect_ai import Task
 from inspect_ai.dataset import Sample
 from inspect_ai.model import ChatMessage, ChatMessageUser
+from inspect_ai.model._generate_config import GenerateConfigArgs
 from inspect_ai.scorer import Target
-from inspect_ai.solver import TaskState
+from inspect_ai.solver import Solver, TaskState
+from typing_extensions import Unpack
 
 # Solvers that require model inference and should stop execution
 # This includes both simple generation and agentic solvers
@@ -67,7 +69,7 @@ def _sample_to_task_state(sample: Sample) -> TaskState:
     )
 
 
-def _get_solver_name(solver: Any) -> str:
+def _get_solver_name(solver: Solver) -> str:
     """Extract the solver name from a solver function."""
     qualname = getattr(solver, "__qualname__", "")
     if ".<locals>." in qualname:
@@ -76,7 +78,7 @@ def _get_solver_name(solver: Any) -> str:
 
 
 async def _run_solvers_until_generate(
-    solver: Any,
+    solver: Solver | None,
     state: TaskState,
 ) -> TaskState:
     """
@@ -90,19 +92,25 @@ async def _run_solvers_until_generate(
         TaskState after all prompt-engineering solvers have run
     """
 
-    async def noop_generate(state: TaskState, **kwargs: Any) -> TaskState:
+    async def noop_generate(
+        state: TaskState,
+        tool_calls: Literal["loop", "single", "none"] = "loop",
+        **kwargs: Unpack[GenerateConfigArgs],
+    ) -> TaskState:
         return state
 
-    # Get list of solvers
+    # No solver
+    if solver is None:
+        return state
+
+    # Get list of solvers - Chain has internal _solvers attribute
+    solvers: list[Solver]
     if hasattr(solver, "_solvers"):
-        # It's a Chain
-        solvers = solver._solvers
-    elif solver is not None:
+        # It's a Chain - access internal list
+        solvers = solver._solvers  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue]
+    else:
         # Single solver
         solvers = [solver]
-    else:
-        # No solver
-        return state
 
     # Run each solver until we hit a generation solver
     for s in solvers:

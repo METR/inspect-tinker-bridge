@@ -114,6 +114,16 @@ class TestLoadInspectTask:
         assert info.metadata == {"version": "1.0"}
 
 
+class _MockSolver:
+    """Mock solver with custom string representation for testing."""
+
+    def __init__(self, str_repr: str) -> None:
+        self._str_repr = str_repr
+
+    def __str__(self) -> str:
+        return self._str_repr
+
+
 class TestSolverHasTools:
     """Tests for _solver_has_tools function."""
 
@@ -128,14 +138,17 @@ class TestSolverHasTools:
     )
     def test_detects_tools(self, solver_str: str, expected: bool) -> None:
         """Test tool detection in solver strings."""
-
-        class MockSolver:
-            def __str__(self) -> str:
-                return solver_str
-
-        result = tasks._solver_has_tools(MockSolver())
+        # Create a mock solver with the specified string representation
+        mock_solver = _MockSolver(solver_str)
+        # Type ignored because _MockSolver is not a real Solver
+        result = tasks._solver_has_tools(mock_solver)  # type: ignore[arg-type]
         assert result == expected
 
     def test_none_solver(self) -> None:
         """Test that None solver returns False."""
         assert tasks._solver_has_tools(None) is False
+
+    def test_generate_solver_has_no_tools(self) -> None:
+        """Test that a simple generate solver has no tools."""
+        result = tasks._solver_has_tools(generate())
+        assert result is False

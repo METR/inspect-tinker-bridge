@@ -3,12 +3,13 @@ Task introspection and loading utilities for Inspect AI tasks.
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
 
 from inspect_ai import Task
 from inspect_ai.dataset import Dataset
 from inspect_ai.scorer import Scorer
+from inspect_ai.solver import Solver
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +24,12 @@ class InspectTaskInfo:
     scorers: list[Scorer]
     sandbox_type: str | None
     solver_has_tools: bool
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, object] = field(default_factory=dict)
 
 
 def load_inspect_task(
     task_fn: Callable[..., Task],
-    **task_kwargs: Any,
+    **task_kwargs: object,
 ) -> InspectTaskInfo:
     """
     Load an Inspect task and extract its components.
@@ -84,7 +85,7 @@ def load_inspect_task(
     return task_info
 
 
-def _solver_has_tools(solver: Any) -> bool:
+def _solver_has_tools(solver: Solver | None) -> bool:
     """Check if a solver chain includes tool usage."""
     if solver is None:
         return False

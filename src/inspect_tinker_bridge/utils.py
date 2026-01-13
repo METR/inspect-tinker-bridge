@@ -2,8 +2,6 @@
 Utility functions and constants for the Inspect-Tinker bridge.
 """
 
-from typing import Any
-
 from inspect_ai.model import (
     ChatMessage,
     ChatMessageAssistant,
@@ -13,6 +11,8 @@ from inspect_ai.model import (
     ModelName,
 )
 from tinker_cookbook.renderers import Message
+
+from inspect_tinker_bridge.types import MessageDict, ToolCallDict
 
 # Dummy model name for TaskState construction
 BRIDGE_MODEL_NAME = ModelName("bridge/bridge-model")
@@ -83,7 +83,7 @@ def chat_messages_to_tinker(messages: list[ChatMessage]) -> list[Message]:
     return [chat_message_to_tinker(msg) for msg in messages]
 
 
-def chat_message_to_dict(msg: ChatMessage) -> dict[str, Any]:
+def chat_message_to_dict(msg: ChatMessage) -> MessageDict:
     """
     Convert an Inspect ChatMessage to a serializable dict for HuggingFace dataset.
 
@@ -91,29 +91,29 @@ def chat_message_to_dict(msg: ChatMessage) -> dict[str, Any]:
     """
     match msg:
         case ChatMessageUser() | ChatMessageSystem():
-            return {"role": msg.role, "content": _extract_content(msg)}
+            return MessageDict(role=msg.role, content=_extract_content(msg))
         case ChatMessageAssistant(tool_calls=tool_calls):
-            result: dict[str, Any] = {
-                "role": msg.role,
-                "content": _extract_content(msg),
-            }
+            result = MessageDict(
+                role=msg.role,
+                content=_extract_content(msg),
+            )
             if tool_calls:
                 result["tool_calls"] = [
-                    {
-                        "id": tc.id,
-                        "type": getattr(tc, "type", "function"),
-                        "function": {
+                    ToolCallDict(
+                        id=tc.id,
+                        type=getattr(tc, "type", "function"),
+                        function={
                             "name": tc.function,
                             "arguments": tc.arguments
                             if isinstance(tc.arguments, str)
                             else str(tc.arguments),
                         },
-                    }
+                    )
                     for tc in tool_calls
                 ]
             return result
         case ChatMessageTool(tool_call_id=tool_call_id, function=function):
-            result = {"role": msg.role, "content": _extract_content(msg)}
+            result = MessageDict(role=msg.role, content=_extract_content(msg))
             if tool_call_id:
                 result["tool_call_id"] = tool_call_id
             if function:
