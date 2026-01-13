@@ -10,9 +10,11 @@ from inspect_ai import Task
 from tinker_cookbook.renderers import Renderer
 
 from inspect_tinker_bridge import dataset as ds
+from inspect_tinker_bridge import scoring
 from inspect_tinker_bridge import tasks
 from inspect_tinker_bridge.env import InspectRLDataset
 from inspect_tinker_bridge.sandbox import SandboxConfig
+from inspect_tinker_bridge.types import CustomRewardFn
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,8 @@ def load_environment(
     sandbox_config: str | None = None,
     submit_instruction: str
     | None = "You must call submit() when you are done to complete the task.",
+    custom_reward_fn: CustomRewardFn | None = None,
+    custom_reward_fn_timeout: float = scoring.CUSTOM_REWARD_FN_TIMEOUT,
     **task_kwargs: object,
 ) -> InspectRLDataset:
     """
@@ -51,6 +55,11 @@ def load_environment(
             environments explaining how to use the submit tool.
             - str: Use custom instruction
             - None: No instruction added
+        custom_reward_fn: Optional function to customize reward computation.
+            Receives ScoringContext with full scorer results and returns
+            float or (float, dict) with custom reward and optional metrics.
+            Can be sync or async.
+        custom_reward_fn_timeout: Timeout in seconds for custom_reward_fn (default 30s)
         **task_kwargs: Arguments to pass to the Inspect task function
 
     Returns:
@@ -144,4 +153,6 @@ def load_environment(
         num_envs_per_group=num_envs_per_group,
         batch_size=batch_size,
         task_name=task_info.name,
+        custom_reward_fn=custom_reward_fn,
+        custom_reward_fn_timeout=custom_reward_fn_timeout,
     )

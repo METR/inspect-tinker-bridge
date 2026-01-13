@@ -6,7 +6,13 @@ through the bridge, enabling better type checking and IDE support.
 """
 
 import json
-from typing import Literal, Required, TypedDict
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal, Required, TypedDict
+
+if TYPE_CHECKING:
+    from inspect_ai.scorer import Score
+    from inspect_ai.util._sandbox.environment import SandboxEnvironment
 
 
 class ToolCallFunctionDict(TypedDict):
@@ -85,3 +91,39 @@ def parse_metadata_json(metadata_raw: str) -> dict[str, object]:
     if not isinstance(parsed, dict):
         raise ValueError(f"Expected metadata to be a dict, got {type(parsed).__name__}")
     return parsed
+
+
+@dataclass
+class ScoringContext:
+    """Full context passed to custom reward functions.
+
+    Attributes:
+        conversation: Full conversation history (shallow copy, safe to read).
+        sample_info: Sample metadata including target answers.
+        scores: Scorer results keyed by name (None if scorer returned None).
+        individual_rewards: Float rewards per scorer (0.0 for None scores).
+        base_reward: Combined reward that would be returned without callback.
+        current_turn: Current turn number in episode.
+        max_turns: Maximum turns configured for episode.
+        answer: Ground truth answer from dataset (may be None).
+        sandbox_envs: Sandbox environments (available for multi-turn with sandbox).
+    """
+
+    conversation: list[MessageDict]
+    sample_info: SampleInfoDict
+    scores: dict[str, "Score | None"]
+    individual_rewards: dict[str, float]
+    base_reward: float
+    current_turn: int
+    max_turns: int
+    answer: str | None
+    sandbox_envs: "dict[str, SandboxEnvironment] | None" = None
+
+
+# Custom reward function type - accepts sync or async, returns float or (float, dict)
+CustomRewardFn = Callable[
+    [ScoringContext],
+    float
+    | tuple[float, dict[str, float]]
+    | Awaitable[float | tuple[float, dict[str, float]]],
+]

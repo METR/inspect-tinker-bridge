@@ -25,6 +25,7 @@ from tinker_cookbook.renderers import Message, Renderer, ToolCall as TinkerToolC
 from inspect_tinker_bridge import sandbox as sandbox_module
 from inspect_tinker_bridge import scoring
 from inspect_tinker_bridge.types import (
+    CustomRewardFn,
     DatasetRowDict,
     MessageDict,
     SampleInfoDict,
@@ -62,6 +63,8 @@ class InspectEnv(types.Env):
         max_turns: int = 1,
         sandbox_config: sandbox_module.SandboxConfig | None = None,
         task_name: str = "inspect",
+        custom_reward_fn: CustomRewardFn | None = None,
+        custom_reward_fn_timeout: float = scoring.CUSTOM_REWARD_FN_TIMEOUT,
     ):
         self.sample_info = sample_info
         self.prompt_messages = prompt_messages
@@ -72,6 +75,8 @@ class InspectEnv(types.Env):
         self.max_turns = max_turns
         self.sandbox_config = sandbox_config
         self.task_name = task_name
+        self.custom_reward_fn = custom_reward_fn
+        self.custom_reward_fn_timeout = custom_reward_fn_timeout
 
         # Per-rollout state
         self.conversation: list[Message] = []
@@ -190,6 +195,11 @@ class InspectEnv(types.Env):
             info=self.sample_info,
             scorers=self.scorers,
             sandbox_envs=sandbox_envs,
+            custom_reward_fn=self.custom_reward_fn,
+            custom_reward_fn_timeout=self.custom_reward_fn_timeout,
+            current_turn=self.current_turn,
+            max_turns=self.max_turns,
+            answer=self.answer,
         )
 
     async def _execute_tools(self, tool_calls: list[TinkerToolCall]) -> list[Message]:
@@ -376,6 +386,8 @@ class InspectRLDataset(types.RLDataset):
         num_envs_per_group: int = 1,
         batch_size: int = 1,
         task_name: str = "inspect",
+        custom_reward_fn: CustomRewardFn | None = None,
+        custom_reward_fn_timeout: float = scoring.CUSTOM_REWARD_FN_TIMEOUT,
     ):
         if batch_size < 1:
             raise ValueError(f"batch_size must be >= 1, got {batch_size}")
@@ -388,6 +400,8 @@ class InspectRLDataset(types.RLDataset):
         self.num_envs_per_group = num_envs_per_group
         self.batch_size = batch_size
         self.task_name = task_name
+        self.custom_reward_fn = custom_reward_fn
+        self.custom_reward_fn_timeout = custom_reward_fn_timeout
 
     def _make_env_group_builder(self, row: DatasetRowDict) -> InspectEnvGroupBuilder:
         """Convert one HF row to an EnvGroupBuilder."""
@@ -403,6 +417,8 @@ class InspectRLDataset(types.RLDataset):
                 max_turns=self.max_turns,
                 sandbox_config=self.sandbox_config,
                 task_name=self.task_name,
+                custom_reward_fn=self.custom_reward_fn,
+                custom_reward_fn_timeout=self.custom_reward_fn_timeout,
             ),
             num_envs=self.num_envs_per_group,
             dataset_name=self.task_name,

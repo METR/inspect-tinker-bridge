@@ -5,8 +5,11 @@ This module provides the core mechanism to call Inspect scorers within the
 Tinker environment framework.
 """
 
+import asyncio
+import inspect
 import json
 import logging
+import math
 from typing import Literal
 
 from inspect_ai.model import (
@@ -23,12 +26,21 @@ from inspect_ai.tool import ToolCall
 from inspect_ai.util._sandbox.environment import SandboxEnvironment
 
 from inspect_tinker_bridge import utils
-from inspect_tinker_bridge.types import MessageDict, SampleInfoDict, parse_metadata_json
+from inspect_tinker_bridge.types import (
+    CustomRewardFn,
+    MessageDict,
+    SampleInfoDict,
+    ScoringContext,
+    parse_metadata_json,
+)
 
 logger = logging.getLogger(__name__)
 
 # ToolCall type values
 _TOOL_CALL_TYPE_FUNCTION: Literal["function"] = "function"
+
+# Default timeout for custom reward functions
+CUSTOM_REWARD_FN_TIMEOUT = 30.0
 
 
 async def run_inspect_scorer(
@@ -137,6 +149,11 @@ async def compute_reward(
     scorers: list[Scorer],
     sandbox_envs: dict[str, SandboxEnvironment] | None = None,
     weights: list[float] | None = None,
+    custom_reward_fn: CustomRewardFn | None = None,
+    custom_reward_fn_timeout: float = CUSTOM_REWARD_FN_TIMEOUT,
+    current_turn: int = 0,
+    max_turns: int = 1,
+    answer: str | None = None,
 ) -> tuple[float, dict[str, float]]:
     """
     Compute combined reward from multiple Inspect scorers.
@@ -147,6 +164,11 @@ async def compute_reward(
         scorers: List of Inspect scorers to run
         sandbox_envs: Optional sandbox environments
         weights: Optional weights for each scorer (must match len(scorers))
+        custom_reward_fn: Optional function to customize reward computation
+        custom_reward_fn_timeout: Timeout in seconds for custom_reward_fn (default 30s)
+        current_turn: Current turn number in episode (for context)
+        max_turns: Maximum turns configured for episode (for context)
+        answer: Ground truth answer from dataset (for context)
 
     Returns:
         Tuple of (combined_reward, individual_rewards_dict)
@@ -164,6 +186,8 @@ async def compute_reward(
         if sum(weights) == 0:
             raise ValueError("weights sum to zero, cannot compute weighted average")
 
+    # Only keep Score objects if custom_reward_fn needs them
+    scores: dict[str, Score | None] | None = {} if custom_reward_fn else None
     individual_rewards: dict[str, float] = {}
     total_weight = sum(weights) if weights else len(scorers)
 
@@ -175,20 +199,114 @@ async def compute_reward(
             scorer=scorer,
             sandbox_envs=sandbox_envs,
         )
-        reward = score_to_reward(score)
-        individual_rewards[f"{scorer_name}_{i}"] = reward
+        key = f"{scorer_name}_{i}"
+        if scores is not None:
+            scores[key] = score
+        individual_rewards[key] = score_to_reward(score)
 
-    # Compute weighted average
+    # Compute base reward (weighted average)
     if weights:
-        combined = sum(
+        base_reward = sum(
             individual_rewards[f"{_get_scorer_name(scorer)}_{i}"] * w
             for i, (scorer, w) in enumerate(zip(scorers, weights, strict=True))
         )
-        combined /= total_weight
+        base_reward /= total_weight
     else:
-        combined = sum(individual_rewards.values()) / len(individual_rewards)
+        base_reward = sum(individual_rewards.values()) / len(individual_rewards)
 
-    return combined, individual_rewards
+    # If custom_reward_fn provided, invoke it
+    if custom_reward_fn:
+        assert scores is not None  # for type checker
+        ctx = ScoringContext(
+            conversation=list(conversation),  # shallow copy
+            sample_info=info,
+            scores=dict(scores),  # shallow copy
+            individual_rewards=dict(individual_rewards),  # shallow copy
+            base_reward=base_reward,
+            current_turn=current_turn,
+            max_turns=max_turns,
+            answer=answer,
+            sandbox_envs=sandbox_envs,
+        )
+
+        final_reward, extra_metrics = await _invoke_custom_reward_fn(
+            custom_reward_fn, ctx, custom_reward_fn_timeout
+        )
+
+        # Merge metrics, prefixing callback metrics to avoid collision
+        merged = dict(individual_rewards)
+        for k, v in extra_metrics.items():
+            key = f"custom_reward_fn/{k}" if k in merged else k
+            merged[key] = v
+        return final_reward, merged
+
+    return base_reward, individual_rewards
+
+
+async def _invoke_custom_reward_fn(
+    custom_reward_fn: CustomRewardFn,
+    ctx: ScoringContext,
+    timeout: float,
+) -> tuple[float, dict[str, float]]:
+    """
+    Invoke custom_reward_fn with timeout, sync/async handling, and validation.
+
+    Args:
+        custom_reward_fn: The user's reward function
+        ctx: Scoring context
+        timeout: Timeout in seconds
+
+    Returns:
+        Tuple of (reward, extra_metrics)
+
+    Raises:
+        asyncio.TimeoutError: If function exceeds timeout
+        TypeError: If return value has wrong type
+    """
+    # Call function (handle sync vs async)
+    if inspect.iscoroutinefunction(custom_reward_fn):
+        coro = custom_reward_fn(ctx)
+    else:
+        # Wrap sync function in coroutine
+        coro = asyncio.to_thread(custom_reward_fn, ctx)
+
+    # Apply timeout
+    result = await asyncio.wait_for(coro, timeout=timeout)
+
+    # Normalize return type (float -> tuple)
+    if isinstance(result, (int, float)):
+        if math.isnan(result) or math.isinf(result):
+            raise ValueError(f"custom_reward_fn reward must be finite, got {result}")
+        return float(result), {}
+
+    # Validate tuple return
+    if not isinstance(result, tuple) or len(result) != 2:
+        raise TypeError(
+            f"custom_reward_fn must return float or (float, dict), got {result!r}. "
+            f"Example: return 0.5 or return (0.5, {{'my_metric': 0.1}})"
+        )
+
+    reward, metrics = result
+    # Runtime validation for user-provided functions that may violate type contract
+    if not isinstance(reward, (int, float)):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise TypeError(
+            f"custom_reward_fn reward must be float, got {type(reward).__name__}"
+        )
+    if math.isnan(reward) or math.isinf(reward):
+        raise ValueError(f"custom_reward_fn reward must be finite, got {reward}")
+    if not isinstance(metrics, dict):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise TypeError(
+            f"custom_reward_fn metrics must be dict, got {type(metrics).__name__}"
+        )
+    for k, v in metrics.items():
+        if not isinstance(v, (int, float)):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise TypeError(
+                f"custom_reward_fn metric '{k}' must be float, got {type(v).__name__}"
+            )
+        if math.isnan(v) or math.isinf(v):
+            logger.warning(f"custom_reward_fn metric '{k}' is not finite: {v}")
+
+    return float(reward), metrics
 
 
 def _get_scorer_name(scorer: Scorer) -> str:
