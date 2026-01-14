@@ -52,3 +52,6 @@ allowedUntypedLibraries = [
   "timeout_decorator",
 ]
 
+[tool.uv.sources]
+tinker-cookbook = { git = "https://github.com/thinking-machines-lab/tinker-cookbook" }
+
