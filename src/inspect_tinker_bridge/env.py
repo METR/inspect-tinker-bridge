@@ -29,7 +29,6 @@ from inspect_tinker_bridge.types import (
     DatasetRowDict,
     MessageDict,
     SampleInfoDict,
-    ToolCallDict,
 )
 
 logger = logging.getLogger(__name__)
@@ -206,9 +205,9 @@ class InspectEnv(types.Env):
         """Execute tool calls and return results."""
         results: list[Message] = []
 
-        for tc in tool_calls:
+        for i, tc in enumerate(tool_calls):
             tool_name = tc.function.name
-            tool_id = tc.id or ""
+            tool_id = tc.id if tc.id else f"tc_{i}"
 
             if tool_name == "submit":
                 self._submitted = True
@@ -321,32 +320,17 @@ class InspectEnv(types.Env):
             msg["name"] = d["name"]
         return msg
 
-    @staticmethod
-    def _message_to_dict(m: Message) -> MessageDict:
-        """Convert a Tinker Message to a dict."""
-        result = MessageDict(
-            role=m["role"],  # type: ignore[typeddict-item]  # Tinker Role is compatible
-            content=m["content"],
-        )
-        if "tool_calls" in m:
-            # Convert Tinker ToolCall to dict format
-            tool_call_dicts: list[ToolCallDict] = [
-                ToolCallDict(
-                    id=tc.id or "",
-                    type="function",
-                    function={
-                        "name": tc.function.name,
-                        "arguments": tc.function.arguments,
-                    },
-                )
-                for tc in m["tool_calls"]
-            ]
-            result["tool_calls"] = tool_call_dicts
-        if "tool_call_id" in m:
-            result["tool_call_id"] = m["tool_call_id"]
-        if "name" in m:
-            result["name"] = m["name"]
-        return result
+    def _message_to_dict(self, m: Message) -> MessageDict:
+        """Convert a Tinker Message to a dict using renderer's to_openai_message.
+
+        Requires renderer to implement to_openai_message (available in tinker-cookbook>=0.1.0).
+        """
+        if not hasattr(self.renderer, "to_openai_message"):
+            raise ValueError(
+                f"Renderer {type(self.renderer).__name__} does not implement to_openai_message. "
+                "Upgrade tinker-cookbook or use a renderer that supports this method."
+            )
+        return cast(MessageDict, self.renderer.to_openai_message(m))
 
 
 @dataclass(frozen=True)

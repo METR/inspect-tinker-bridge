@@ -25,7 +25,7 @@ class ToolCallFunctionDict(TypedDict):
 class ToolCallDict(TypedDict):
     """Tool call in OpenAI-style format."""
 
-    id: str
+    id: str | None  # Can be None for formats that don't include IDs (e.g., Harmony)
     type: Literal["function"]
     function: ToolCallFunctionDict
 
@@ -35,7 +35,7 @@ class MessageDict(TypedDict, total=False):
     Message in OpenAI-style chat format.
 
     Required keys: role, content
-    Optional keys: tool_calls, tool_call_id, name
+    Optional keys: tool_calls, tool_call_id, name, reasoning_content
     """
 
     role: Required[Literal["system", "user", "assistant", "tool"]]
@@ -43,6 +43,7 @@ class MessageDict(TypedDict, total=False):
     tool_calls: list[ToolCallDict]
     tool_call_id: str
     name: str
+    reasoning_content: str  # Chain-of-thought / thinking tokens
 
 
 class SampleInfoDict(TypedDict, total=False):

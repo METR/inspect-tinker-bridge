@@ -1,17 +1,25 @@
 """Tests for env module."""
 
+from typing import Any
+
 import pytest
 from datasets import Dataset as HFDataset
 from inspect_ai.scorer import Scorer
 from pytest_mock import MockerFixture
-from tinker_cookbook.renderers import Message
+from tinker_cookbook.renderers import Message, TextPart, ThinkingPart
 
 from inspect_tinker_bridge import env
 from inspect_tinker_bridge.types import MessageDict, SampleInfoDict
 
 
 class FakeRenderer:
-    """Fake Renderer for testing without tokenizer."""
+    """Fake Renderer for testing without a real tokenizer.
+
+    Mimics thinking-model renderers (Qwen3, GptOss, DeepSeek, KimiK2) that extract
+    reasoning_content as a separate field. The base Renderer wraps thinking in
+    <think> tags within content instead - this fake specifically tests the
+    reasoning_content extraction path.
+    """
 
     def build_generation_prompt(self, messages: list[Message]) -> object:
         """Return a fake ModelInput."""
@@ -27,6 +35,52 @@ class FakeRenderer:
 
     def parse_response(self, action: list[int]) -> tuple[Message, bool]:
         return Message(role="assistant", content="4"), True
+
+    def to_openai_message(self, m: Message) -> dict[str, Any]:
+        """Convert a Message to OpenAI API format with reasoning_content extraction.
+
+        Mimics thinking-model renderers that extract thinking into reasoning_content,
+        not the base Renderer which wraps thinking in <think> tags.
+        """
+        result: dict[str, Any] = {"role": m["role"]}
+
+        content = m["content"]
+        if isinstance(content, str):
+            result["content"] = content
+        else:
+            # Extract thinking into reasoning_content, text into content
+            thinking_parts: list[str] = []
+            text_parts: list[str] = []
+            for p in content:
+                if p["type"] == "thinking":
+                    thinking_parts.append(p["thinking"])
+                elif p["type"] == "text":
+                    text_parts.append(p["text"])
+            result["content"] = "".join(text_parts)
+            if thinking_parts:
+                result["reasoning_content"] = "".join(thinking_parts)
+
+        # Handle tool_calls
+        if "tool_calls" in m and m["tool_calls"]:
+            result["tool_calls"] = [
+                {
+                    "type": "function",
+                    "id": tc.id,
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments,
+                    },
+                }
+                for tc in m["tool_calls"]
+            ]
+
+        # Handle tool response fields
+        if "tool_call_id" in m:
+            result["tool_call_id"] = m["tool_call_id"]
+        if "name" in m:
+            result["name"] = m["name"]
+
+        return result
 
 
 class TestInspectEnv:
@@ -225,3 +279,65 @@ class TestInspectRLDataset:
         builder = builders[0]
         assert isinstance(builder, env.InspectEnvGroupBuilder)
         assert builder.num_envs == 5
+
+
+class TestMessageConversion:
+    """Tests for message conversion functions."""
+
+    @pytest.mark.parametrize(
+        "content,expected_content,expected_reasoning",
+        [
+            pytest.param(
+                "Simple answer",
+                "Simple answer",
+                None,
+                id="string_content",
+            ),
+            pytest.param(
+                [
+                    ThinkingPart(type="thinking", thinking="Let me think..."),
+                    TextPart(type="text", text="The answer is 4"),
+                ],
+                "The answer is 4",
+                "Let me think...",
+                id="thinking_content",
+            ),
+        ],
+    )
+    def test_message_to_dict_content_handling(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        content: Any,  # str or list of ContentPart dicts
+        expected_content: str,
+        expected_reasoning: str | None,
+    ) -> None:
+        """Test that _message_to_dict handles different content types correctly."""
+        renderer = FakeRenderer()
+        e = env.InspectEnv(
+            sample_info=sample_info,
+            prompt_messages=prompt_messages,
+            answer="4",
+            renderer=renderer,  # type: ignore[arg-type]
+            scorers=[],
+            env_type="single_turn",
+        )
+
+        msg = Message(role="assistant", content=content)
+        result = e._message_to_dict(msg)
+
+        assert result["role"] == "assistant"
+        assert result["content"] == expected_content
+        if expected_reasoning is not None:
+            assert result.get("reasoning_content") == expected_reasoning
+        else:
+            assert "reasoning_content" not in result
+
+    def test_dict_to_message_basic(self) -> None:
+        """Test that _dict_to_message converts basic fields correctly."""
+        msg_dict = MessageDict(role="user", content="What is 2+2?")
+
+        result = env.InspectEnv._dict_to_message(msg_dict)
+
+        assert result["role"] == "user"
+        assert result["content"] == "What is 2+2?"

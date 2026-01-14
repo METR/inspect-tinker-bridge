@@ -354,12 +354,12 @@ def _build_inspect_messages(messages: list[MessageDict]) -> list[ChatMessage]:
             if "tool_calls" in msg and msg["tool_calls"]:
                 tool_calls = [
                     ToolCall(
-                        id=tc["id"],
+                        id=tc["id"] if tc["id"] else f"tc_{i}",
                         function=tc["function"]["name"],
                         arguments=_parse_tool_arguments(tc["function"]["arguments"]),
                         type=_TOOL_CALL_TYPE_FUNCTION,
                     )
-                    for tc in msg["tool_calls"]
+                    for i, tc in enumerate(msg["tool_calls"])
                 ]
             result.append(ChatMessageAssistant(content=content, tool_calls=tool_calls))
         elif role == "tool":
