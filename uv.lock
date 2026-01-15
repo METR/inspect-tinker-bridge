@@ -944,7 +944,7 @@ requires-dist = [
     { name = "inspect-ai", specifier = "~=0.3.158" },
     { name = "inspect-evals", specifier = ">=0.3.102" },
     { name = "tinker", specifier = ">=0.7.0" },
-    { name = "tinker-cookbook", git = "https://github.com/thinking-machines-lab/tinker-cookbook" },
+    { name = "tinker-cookbook", git = "https://github.com/METR/tinker-cookbook" },
 ]
 
 [package.metadata.requires-dev]
@@ -3005,7 +3005,7 @@ wheels = [
 [[package]]
 name = "tinker-cookbook"
 version = "0.1.0"
-source = { git = "https://github.com/thinking-machines-lab/tinker-cookbook#9934ede014f1f20f76460ab9ca9e6014540ab2f0" }
+source = { git = "https://github.com/METR/tinker-cookbook#9692e7296b5ef6904b64375fce24b1c21c6294cc" }
 dependencies = [
     { name = "anyio" },
     { name = "blobfile" },
