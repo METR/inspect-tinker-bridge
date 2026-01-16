@@ -4,6 +4,8 @@ This module provides a pre-configured rollout saving wrapper that knows how to
 serialize ScoringContext and Score objects from inspect-tinker-bridge.
 """
 
+import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -17,27 +19,27 @@ from tinker_cookbook.rl.rollout_saving import (
 from inspect_tinker_bridge.scoring import score_to_reward
 from inspect_tinker_bridge.types import ScoringContext
 
-# Type alias for reward functions that take ScoringContext
+logger = logging.getLogger(__name__)
+
+# Type alias for reward functions that take ScoringContext.
+# This differs from CustomRewardFn (which is a user hook inside compute_reward that
+# can be sync/async and return float or tuple). RewardFn is the outer reward function
+# signature required by tinker_cookbook's rollout saving wrapper.
 RewardFn = Callable[[ScoringContext], tuple[float, dict[str, float]]]
 
 
-def _build_score_details(ctx: ScoringContext) -> dict[str, dict[str, Any]]:
-    """Convert ScoringContext.scores to serializable score_details dict."""
-    details: dict[str, dict[str, Any]] = {}
-    for key, score in ctx.scores.items():
-        if score is not None:
-            details[key] = {
-                "value": score_to_reward(score),
-                "answer": score.answer,
-                "metadata": score.metadata or {},
-            }
-        else:
-            details[key] = {
-                "value": 0.0,
-                "answer": None,
-                "metadata": {},
-            }
-    return details
+def _safe_json_serializable(obj: Any) -> Any:
+    """Convert an object to a JSON-serializable form.
+
+    Attempts to serialize the object to JSON. If that fails, returns a string
+    representation to avoid crashing during rollout saving.
+    """
+    try:
+        json.dumps(obj)
+        return obj
+    except (TypeError, ValueError) as e:
+        logger.warning(f"Non-serializable metadata converted to string: {e}")
+        return {"_raw": str(obj)}
 
 
 def with_rollout_saving(
@@ -52,8 +54,6 @@ def with_rollout_saving(
     This is a convenience wrapper around tinker_cookbook.rl.rollout_saving.with_rollout_saving
     that knows how to serialize ScoringContext and Score objects.
 
-    Saves 3 rollouts (best, worst, random) every `save_every` steps.
-
     Args:
         inner_fn: The original reward function to wrap
         output_path: Path to the rollouts.jsonl file
@@ -63,7 +63,15 @@ def with_rollout_saving(
 
     Returns:
         Wrapped function that periodically saves selected rollouts to JSONL
+
+    Raises:
+        ValueError: If samples_per_batch or save_every are not positive
     """
+    if samples_per_batch <= 0:
+        raise ValueError(f"samples_per_batch must be positive, got {samples_per_batch}")
+    if save_every <= 0:
+        raise ValueError(f"save_every must be positive, got {save_every}")
+
     tokenizer = renderer.tokenizer
 
     def build_record(
@@ -74,7 +82,21 @@ def with_rollout_saving(
         renderer_name: str,
     ) -> dict[str, Any]:
         """Build rollout record with inspect-specific score details."""
-        score_details = _build_score_details(ctx)
+        # Build score details inline
+        score_details: dict[str, dict[str, Any]] = {}
+        for key, score in ctx.scores.items():
+            if score is not None:
+                score_details[key] = {
+                    "value": score_to_reward(score),
+                    "answer": score.answer,
+                    "metadata": _safe_json_serializable(score.metadata or {}),
+                }
+            else:
+                score_details[key] = {
+                    "value": 0.0,
+                    "answer": None,
+                    "metadata": {},
+                }
 
         # Compute token counts
         token_counts = [
