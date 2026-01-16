@@ -944,7 +944,7 @@ requires-dist = [
     { name = "inspect-ai", specifier = "~=0.3.158" },
     { name = "inspect-evals", specifier = ">=0.3.102" },
     { name = "tinker", specifier = ">=0.7.0" },
-    { name = "tinker-cookbook", git = "https://github.com/METR/tinker-cookbook?rev=feat%2Fexpose-sampling-metadata" },
+    { name = "tinker-cookbook", git = "https://github.com/METR/tinker-cookbook?rev=main" },
 ]
 
 [package.metadata.requires-dev]
@@ -3005,7 +3005,7 @@ wheels = [
 [[package]]
 name = "tinker-cookbook"
 version = "0.1.0"
-source = { git = "https://github.com/METR/tinker-cookbook?rev=feat%2Fexpose-sampling-metadata#98af091b0fdb5fee79ded9a3d4cecec003c687c8" }
+source = { git = "https://github.com/METR/tinker-cookbook?rev=main#8bb3add43ed449d9b406e4d36920123d84b63b89" }
 dependencies = [
     { name = "anyio" },
     { name = "blobfile" },

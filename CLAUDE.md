@@ -15,3 +15,27 @@ content = msg.get("content", "")
 ```
 
 Reserve `.get()` for truly optional fields (those without `Required` in the TypedDict).
+
+## Test Style
+
+**Parameterize similar tests:** Always use `@pytest.mark.parametrize` with `pytest.param(..., id="descriptive_name")` when testing multiple inputs with the same logic. Extract shared setup into fixtures to reduce duplication.
+
+```python
+# Good - parameterized
+@pytest.mark.parametrize(
+    ("input", "expected"),
+    [
+        pytest.param(0, "zero", id="zero_case"),
+        pytest.param(-1, "negative", id="negative_case"),
+    ],
+)
+def test_something(self, input: int, expected: str) -> None:
+    assert func(input) == expected
+
+# Bad - duplicated test functions
+def test_something_zero(self) -> None:
+    assert func(0) == "zero"
+
+def test_something_negative(self) -> None:
+    assert func(-1) == "negative"
+```
