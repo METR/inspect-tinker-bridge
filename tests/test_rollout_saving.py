@@ -41,102 +41,115 @@ def _dummy_reward_fn(ctx: ScoringContext) -> tuple[float, dict[str, float]]:
     return (0.5, {})
 
 
+class _CustomClass:
+    """Non-serializable custom class for testing."""
+
+    pass
+
+
 class TestSafeJsonSerializable:
     """Tests for _safe_json_serializable."""
 
-    def test_serializable_dict_returned_as_is(self) -> None:
+    @pytest.mark.parametrize(
+        "data",
+        [
+            pytest.param({"key": "value", "number": 42, "nested": {"a": 1}}, id="dict"),
+            pytest.param([1, 2, "three", {"nested": True}], id="list"),
+            pytest.param("simple string", id="string"),
+            pytest.param(42, id="int"),
+        ],
+    )
+    def test_serializable_objects_returned_as_is(self, data: Any) -> None:
         """Serializable objects should be returned unchanged."""
-        data = {"key": "value", "number": 42, "nested": {"a": 1}}
         result = rollout_saving._safe_json_serializable(data)
         assert result == data
 
-    def test_serializable_list_returned_as_is(self) -> None:
-        """Serializable lists should be returned unchanged."""
-        data = [1, 2, "three", {"nested": True}]
-        result = rollout_saving._safe_json_serializable(data)
-        assert result == data
-
-    def test_non_serializable_datetime_returns_raw(self) -> None:
-        """Non-serializable datetime should return _raw string."""
-        data = {"timestamp": datetime.now()}
-        result = rollout_saving._safe_json_serializable(data)
-        assert "_raw" in result
-        assert isinstance(result["_raw"], str)
-
-    def test_non_serializable_custom_class_returns_raw(self) -> None:
-        """Non-serializable custom class should return _raw string."""
-
-        class CustomClass:
-            pass
-
-        data = {"obj": CustomClass()}
+    @pytest.mark.parametrize(
+        "data",
+        [
+            pytest.param({"timestamp": datetime.now()}, id="datetime"),
+            pytest.param({"obj": _CustomClass()}, id="custom_class"),
+            pytest.param({"binary": b"hello"}, id="bytes"),
+        ],
+    )
+    def test_non_serializable_objects_return_raw(self, data: Any) -> None:
+        """Non-serializable objects should return _raw string."""
         result = rollout_saving._safe_json_serializable(data)
         assert "_raw" in result
         assert isinstance(result["_raw"], str)
-
-    def test_non_serializable_bytes_returns_raw(self) -> None:
-        """Non-serializable bytes should return _raw string."""
-        data = {"binary": b"hello"}
-        result = rollout_saving._safe_json_serializable(data)
-        assert "_raw" in result
 
 
 class TestWithRolloutSavingValidation:
     """Tests for with_rollout_saving parameter validation."""
 
-    def test_samples_per_batch_zero_raises_valueerror(self) -> None:
-        """samples_per_batch=0 should raise ValueError."""
+    @pytest.mark.parametrize(
+        ("samples_per_batch", "save_every", "expected_error"),
+        [
+            pytest.param(
+                0, 10, "samples_per_batch must be positive", id="samples_zero"
+            ),
+            pytest.param(
+                -5, 10, "samples_per_batch must be positive", id="samples_negative"
+            ),
+            pytest.param(10, 0, "save_every must be positive", id="save_every_zero"),
+            pytest.param(
+                10, -1, "save_every must be positive", id="save_every_negative"
+            ),
+        ],
+    )
+    def test_invalid_parameters_raise_valueerror(
+        self, samples_per_batch: int, save_every: int, expected_error: str
+    ) -> None:
+        """Invalid parameter values should raise ValueError."""
         mock_renderer = MagicMock()
         mock_renderer.tokenizer = MagicMock()
 
-        with pytest.raises(ValueError, match="samples_per_batch must be positive"):
+        with pytest.raises(ValueError, match=expected_error):
             rollout_saving.with_rollout_saving(
                 inner_fn=_dummy_reward_fn,
                 output_path=Path("/tmp/rollouts.jsonl"),
                 renderer=mock_renderer,
-                samples_per_batch=0,
+                samples_per_batch=samples_per_batch,
+                save_every=save_every,
             )
 
-    def test_samples_per_batch_negative_raises_valueerror(self) -> None:
-        """Negative samples_per_batch should raise ValueError."""
-        mock_renderer = MagicMock()
-        mock_renderer.tokenizer = MagicMock()
 
-        with pytest.raises(ValueError, match="samples_per_batch must be positive"):
-            rollout_saving.with_rollout_saving(
-                inner_fn=_dummy_reward_fn,
-                output_path=Path("/tmp/rollouts.jsonl"),
-                renderer=mock_renderer,
-                samples_per_batch=-5,
-            )
+@pytest.fixture
+def capture_build_record(mocker: MockerFixture) -> Any:
+    """Fixture that captures the build_record callback from with_rollout_saving."""
+    captured: dict[str, Any] = {"build_record": None}
 
-    def test_save_every_zero_raises_valueerror(self) -> None:
-        """save_every=0 should raise ValueError."""
-        mock_renderer = MagicMock()
-        mock_renderer.tokenizer = MagicMock()
+    def capture_upstream(
+        inner_fn: RolloutRewardFnSig,
+        output_path: Any,
+        renderer: Any,
+        *,
+        samples_per_batch: int,
+        save_every: int,
+        build_record: Any,
+    ) -> RolloutRewardFnSig:
+        captured["build_record"] = build_record
+        return inner_fn
 
-        with pytest.raises(ValueError, match="save_every must be positive"):
-            rollout_saving.with_rollout_saving(
-                inner_fn=_dummy_reward_fn,
-                output_path=Path("/tmp/rollouts.jsonl"),
-                renderer=mock_renderer,
-                samples_per_batch=10,
-                save_every=0,
-            )
+    mocker.patch.object(
+        rollout_saving, "_with_rollout_saving", side_effect=capture_upstream
+    )
+    mocker.patch.object(
+        rollout_saving, "compute_message_tokens", return_value={"total": 5}
+    )
 
-    def test_save_every_negative_raises_valueerror(self) -> None:
-        """Negative save_every should raise ValueError."""
-        mock_renderer = MagicMock()
-        mock_renderer.tokenizer = MagicMock()
+    mock_renderer = MagicMock()
+    mock_renderer.tokenizer = MagicMock()
 
-        with pytest.raises(ValueError, match="save_every must be positive"):
-            rollout_saving.with_rollout_saving(
-                inner_fn=_dummy_reward_fn,
-                output_path=Path("/tmp/rollouts.jsonl"),
-                renderer=mock_renderer,
-                samples_per_batch=10,
-                save_every=-1,
-            )
+    rollout_saving.with_rollout_saving(
+        inner_fn=_dummy_reward_fn,
+        output_path=Path("/tmp/rollouts.jsonl"),
+        renderer=mock_renderer,
+        samples_per_batch=10,
+    )
+
+    assert captured["build_record"] is not None
+    return captured["build_record"]
 
 
 class TestWithRolloutSavingWrapper:
@@ -172,47 +185,10 @@ class TestWithRolloutSavingWrapper:
         assert "build_record" in call_kwargs
 
     def test_build_record_returns_expected_structure(
-        self, mocker: MockerFixture, sample_context: ScoringContext
+        self, capture_build_record: Any, sample_context: ScoringContext
     ) -> None:
         """build_record callback should return dict with expected keys."""
-        captured_build_record: Any = None
-
-        def capture_upstream(
-            inner_fn: RolloutRewardFnSig,
-            output_path: Any,
-            renderer: Any,
-            *,
-            samples_per_batch: int,
-            save_every: int,
-            build_record: Any,
-        ) -> RolloutRewardFnSig:
-            nonlocal captured_build_record
-            captured_build_record = build_record
-            return inner_fn
-
-        mocker.patch.object(
-            rollout_saving, "_with_rollout_saving", side_effect=capture_upstream
-        )
-        mocker.patch.object(
-            rollout_saving,
-            "compute_message_tokens",
-            return_value={"total": 10, "content": 8, "reasoning_content": 2},
-        )
-
-        mock_renderer = MagicMock()
-        mock_renderer.tokenizer = MagicMock()
-
-        rollout_saving.with_rollout_saving(
-            inner_fn=_dummy_reward_fn,
-            output_path=Path("/tmp/rollouts.jsonl"),
-            renderer=mock_renderer,
-            samples_per_batch=10,
-        )
-
-        assert captured_build_record is not None
-
-        # Call build_record with sample context
-        record = captured_build_record(
+        record = capture_build_record(
             ctx=sample_context,
             total_reward=0.75,
             rewards={"scorer_0": 0.5, "scorer_1": 1.0},
@@ -220,7 +196,6 @@ class TestWithRolloutSavingWrapper:
             renderer_name="test_renderer",
         )
 
-        # Verify structure
         assert "timestamp" in record
         assert record["step"] == 42
         assert record["sample_id"] == "test_123"
@@ -233,46 +208,11 @@ class TestWithRolloutSavingWrapper:
         assert "scores" in record
 
     def test_build_record_handles_score_with_metadata(
-        self, mocker: MockerFixture
+        self, capture_build_record: Any
     ) -> None:
         """build_record should handle scores with metadata."""
         from inspect_ai.scorer import Score
 
-        captured_build_record: Any = None
-
-        def capture_upstream(
-            inner_fn: RolloutRewardFnSig,
-            output_path: Any,
-            renderer: Any,
-            *,
-            samples_per_batch: int,
-            save_every: int,
-            build_record: Any,
-        ) -> RolloutRewardFnSig:
-            nonlocal captured_build_record
-            captured_build_record = build_record
-            return inner_fn
-
-        mocker.patch.object(
-            rollout_saving, "_with_rollout_saving", side_effect=capture_upstream
-        )
-        mocker.patch.object(
-            rollout_saving, "compute_message_tokens", return_value={"total": 5}
-        )
-
-        mock_renderer = MagicMock()
-        mock_renderer.tokenizer = MagicMock()
-
-        rollout_saving.with_rollout_saving(
-            inner_fn=_dummy_reward_fn,
-            output_path=Path("/tmp/rollouts.jsonl"),
-            renderer=mock_renderer,
-            samples_per_batch=10,
-        )
-
-        assert captured_build_record is not None
-
-        # Create context with scores
         ctx = ScoringContext(
             conversation=[MessageDict(role="user", content="test")],
             sample_info=SampleInfoDict(
@@ -294,7 +234,7 @@ class TestWithRolloutSavingWrapper:
             answer="answer",
         )
 
-        record = captured_build_record(
+        record = capture_build_record(
             ctx=ctx,
             total_reward=0.5,
             rewards={},
@@ -302,57 +242,18 @@ class TestWithRolloutSavingWrapper:
             renderer_name="test",
         )
 
-        # Verify score details
-        assert "match_0" in record["scores"]
         assert record["scores"]["match_0"]["value"] == 1.0
         assert record["scores"]["match_0"]["answer"] == "correct"
         assert record["scores"]["match_0"]["metadata"] == {"reason": "exact"}
-
-        assert "null_score" in record["scores"]
         assert record["scores"]["null_score"]["value"] == 0.0
         assert record["scores"]["null_score"]["answer"] is None
 
     def test_build_record_handles_non_serializable_metadata(
-        self, mocker: MockerFixture
+        self, capture_build_record: Any
     ) -> None:
         """build_record should safely handle non-serializable score metadata."""
         from inspect_ai.scorer import Score
 
-        captured_build_record: Any = None
-
-        def capture_upstream(
-            inner_fn: RolloutRewardFnSig,
-            output_path: Any,
-            renderer: Any,
-            *,
-            samples_per_batch: int,
-            save_every: int,
-            build_record: Any,
-        ) -> RolloutRewardFnSig:
-            nonlocal captured_build_record
-            captured_build_record = build_record
-            return inner_fn
-
-        mocker.patch.object(
-            rollout_saving, "_with_rollout_saving", side_effect=capture_upstream
-        )
-        mocker.patch.object(
-            rollout_saving, "compute_message_tokens", return_value={"total": 5}
-        )
-
-        mock_renderer = MagicMock()
-        mock_renderer.tokenizer = MagicMock()
-
-        rollout_saving.with_rollout_saving(
-            inner_fn=_dummy_reward_fn,
-            output_path=Path("/tmp/rollouts.jsonl"),
-            renderer=mock_renderer,
-            samples_per_batch=10,
-        )
-
-        assert captured_build_record is not None
-
-        # Create context with non-serializable metadata
         ctx = ScoringContext(
             conversation=[MessageDict(role="user", content="test")],
             sample_info=SampleInfoDict(
@@ -365,7 +266,7 @@ class TestWithRolloutSavingWrapper:
                 "scorer_0": Score(
                     value=1.0,
                     answer="ok",
-                    metadata={"timestamp": datetime.now()},  # Not JSON serializable
+                    metadata={"timestamp": datetime.now()},
                 ),
             },
             individual_rewards={"scorer_0": 1.0},
@@ -375,8 +276,7 @@ class TestWithRolloutSavingWrapper:
             answer="answer",
         )
 
-        # Should not raise - metadata is safely converted
-        record = captured_build_record(
+        record = capture_build_record(
             ctx=ctx,
             total_reward=1.0,
             rewards={},
@@ -384,49 +284,13 @@ class TestWithRolloutSavingWrapper:
             renderer_name="test",
         )
 
-        # Verify metadata was safely serialized
         metadata = record["scores"]["scorer_0"]["metadata"]
         assert "_raw" in metadata
 
     def test_build_record_missing_inspect_sample_id(
-        self, mocker: MockerFixture
+        self, capture_build_record: Any
     ) -> None:
         """build_record should handle missing inspect_sample_id gracefully."""
-        captured_build_record: Any = None
-
-        def capture_upstream(
-            inner_fn: RolloutRewardFnSig,
-            output_path: Any,
-            renderer: Any,
-            *,
-            samples_per_batch: int,
-            save_every: int,
-            build_record: Any,
-        ) -> RolloutRewardFnSig:
-            nonlocal captured_build_record
-            captured_build_record = build_record
-            return inner_fn
-
-        mocker.patch.object(
-            rollout_saving, "_with_rollout_saving", side_effect=capture_upstream
-        )
-        mocker.patch.object(
-            rollout_saving, "compute_message_tokens", return_value={"total": 5}
-        )
-
-        mock_renderer = MagicMock()
-        mock_renderer.tokenizer = MagicMock()
-
-        rollout_saving.with_rollout_saving(
-            inner_fn=_dummy_reward_fn,
-            output_path=Path("/tmp/rollouts.jsonl"),
-            renderer=mock_renderer,
-            samples_per_batch=10,
-        )
-
-        assert captured_build_record is not None
-
-        # Create context without inspect_sample_id
         ctx = ScoringContext(
             conversation=[MessageDict(role="user", content="test")],
             sample_info=SampleInfoDict(
@@ -442,7 +306,7 @@ class TestWithRolloutSavingWrapper:
             answer="answer",
         )
 
-        record = captured_build_record(
+        record = capture_build_record(
             ctx=ctx,
             total_reward=0.0,
             rewards={},
@@ -450,5 +314,4 @@ class TestWithRolloutSavingWrapper:
             renderer_name="test",
         )
 
-        # sample_id should be None when inspect_sample_id is missing
         assert record["sample_id"] is None
