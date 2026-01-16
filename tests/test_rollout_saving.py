@@ -9,7 +9,7 @@ import pytest
 from pytest_mock import MockerFixture
 
 from inspect_tinker_bridge import rollout_saving
-from inspect_tinker_bridge.rollout_saving import RewardFn
+from inspect_tinker_bridge.rollout_saving import RolloutRewardFnSig
 from inspect_tinker_bridge.types import MessageDict, SampleInfoDict, ScoringContext
 
 
@@ -178,14 +178,14 @@ class TestWithRolloutSavingWrapper:
         captured_build_record: Any = None
 
         def capture_upstream(
-            inner_fn: RewardFn,
+            inner_fn: RolloutRewardFnSig,
             output_path: Any,
             renderer: Any,
             *,
             samples_per_batch: int,
             save_every: int,
             build_record: Any,
-        ) -> RewardFn:
+        ) -> RolloutRewardFnSig:
             nonlocal captured_build_record
             captured_build_record = build_record
             return inner_fn
@@ -241,14 +241,14 @@ class TestWithRolloutSavingWrapper:
         captured_build_record: Any = None
 
         def capture_upstream(
-            inner_fn: RewardFn,
+            inner_fn: RolloutRewardFnSig,
             output_path: Any,
             renderer: Any,
             *,
             samples_per_batch: int,
             save_every: int,
             build_record: Any,
-        ) -> RewardFn:
+        ) -> RolloutRewardFnSig:
             nonlocal captured_build_record
             captured_build_record = build_record
             return inner_fn
@@ -321,14 +321,14 @@ class TestWithRolloutSavingWrapper:
         captured_build_record: Any = None
 
         def capture_upstream(
-            inner_fn: RewardFn,
+            inner_fn: RolloutRewardFnSig,
             output_path: Any,
             renderer: Any,
             *,
             samples_per_batch: int,
             save_every: int,
             build_record: Any,
-        ) -> RewardFn:
+        ) -> RolloutRewardFnSig:
             nonlocal captured_build_record
             captured_build_record = build_record
             return inner_fn
@@ -395,14 +395,14 @@ class TestWithRolloutSavingWrapper:
         captured_build_record: Any = None
 
         def capture_upstream(
-            inner_fn: RewardFn,
+            inner_fn: RolloutRewardFnSig,
             output_path: Any,
             renderer: Any,
             *,
             samples_per_batch: int,
             save_every: int,
             build_record: Any,
-        ) -> RewardFn:
+        ) -> RolloutRewardFnSig:
             nonlocal captured_build_record
             captured_build_record = build_record
             return inner_fn

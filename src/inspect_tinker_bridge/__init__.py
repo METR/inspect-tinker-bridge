@@ -8,7 +8,7 @@ from inspect_tinker_bridge.env import (
     InspectRLDataset,
 )
 from inspect_tinker_bridge.loader import load_environment
-from inspect_tinker_bridge.rollout_saving import RewardFn, with_rollout_saving
+from inspect_tinker_bridge.rollout_saving import RolloutRewardFnSig, with_rollout_saving
 from inspect_tinker_bridge.sandbox import SandboxConfig, SandboxInstance
 from inspect_tinker_bridge.tasks import InspectTaskInfo, load_inspect_task
 
@@ -22,5 +22,5 @@ __all__ = [
     "InspectTaskInfo",
     "load_inspect_task",
     "with_rollout_saving",
-    "RewardFn",
+    "RolloutRewardFnSig",
 ]

@@ -53,5 +53,5 @@ allowedUntypedLibraries = [
 ]
 
 [tool.uv.sources]
-tinker-cookbook = { git = "https://github.com/METR/tinker-cookbook", rev = "feat/expose-sampling-metadata" }
+tinker-cookbook = { git = "https://github.com/METR/tinker-cookbook", rev = "main" }
 

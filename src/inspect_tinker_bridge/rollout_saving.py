@@ -21,11 +21,7 @@ from inspect_tinker_bridge.types import ScoringContext
 
 logger = logging.getLogger(__name__)
 
-# Type alias for reward functions that take ScoringContext.
-# This differs from CustomRewardFn (which is a user hook inside compute_reward that
-# can be sync/async and return float or tuple). RewardFn is the outer reward function
-# signature required by tinker_cookbook's rollout saving wrapper.
-RewardFn = Callable[[ScoringContext], tuple[float, dict[str, float]]]
+RolloutRewardFnSig = Callable[[ScoringContext], tuple[float, dict[str, float]]]
 
 
 def _safe_json_serializable(obj: Any) -> Any:
@@ -43,12 +39,12 @@ def _safe_json_serializable(obj: Any) -> Any:
 
 
 def with_rollout_saving(
-    inner_fn: RewardFn,
+    inner_fn: RolloutRewardFnSig,
     output_path: Path,
     renderer: Renderer,
     samples_per_batch: int,
     save_every: int = 10,
-) -> RewardFn:
+) -> RolloutRewardFnSig:
     """Wrap a reward function to save rollouts periodically.
 
     This is a convenience wrapper around tinker_cookbook.rl.rollout_saving.with_rollout_saving
