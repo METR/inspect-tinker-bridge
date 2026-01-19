@@ -28,6 +28,7 @@ def load_environment(
     max_turns: int = 10,
     num_envs_per_group: int = 1,
     batch_size: int = 1,
+    num_epochs: int = 1,
     sandbox_type: str | None = None,
     sandbox_config: str | None = None,
     submit_instruction: str
@@ -49,6 +50,7 @@ def load_environment(
         max_turns: Max turns for multi-turn environments (default: 10)
         num_envs_per_group: Number of parallel rollouts per problem (for GRPO, etc.)
         batch_size: Number of problems per batch
+        num_epochs: Number of passes through the dataset (default: 1)
         sandbox_type: Override sandbox type (e.g., "docker", "local")
         sandbox_config: Sandbox configuration file path
         submit_instruction: Instruction appended to system prompt for multi-turn
@@ -90,7 +92,8 @@ def load_environment(
     logger.info(
         f"Loading environment: env_type={env_type}, "
         f"max_samples={max_samples}, max_turns={max_turns}, "
-        f"num_envs_per_group={num_envs_per_group}, batch_size={batch_size}"
+        f"num_envs_per_group={num_envs_per_group}, batch_size={batch_size}, "
+        f"num_epochs={num_epochs}"
     )
 
     # Load and introspect the task
@@ -155,4 +158,5 @@ def load_environment(
         task_name=task_info.name,
         custom_reward_fn=custom_reward_fn,
         custom_reward_fn_timeout=custom_reward_fn_timeout,
+        num_epochs=num_epochs,
     )

@@ -1,5 +1,5 @@
 """
-Example: Train Qwen3-30B-A3B-Instruct on AIME 2025 using Inspect-Tinker bridge.
+Example: Train Qwen3-4b on AIME 2025 using Inspect-Tinker bridge.
 
 AIME (American Invitational Mathematics Examination) 2025 problems test advanced
 high school mathematics. This trains with RL on the 30 AIME problems.
@@ -35,7 +35,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# Qwen3-30B-A3B-Instruct: MoE model with ~30B active params, efficient for training
 MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507"
 RENDERER_NAME = model_info.get_recommended_renderer_name(MODEL_NAME)
 
@@ -57,6 +56,7 @@ class Aime2025DatasetBuilder(RLDatasetBuilder):
 
     batch_size: int = 4
     group_size: int = 8
+    num_epochs: int = 1
     max_samples: int | None = None
     save_rollouts: bool = True
 
@@ -85,10 +85,13 @@ class Aime2025DatasetBuilder(RLDatasetBuilder):
             max_samples=self.max_samples,
             batch_size=self.batch_size,
             num_envs_per_group=self.group_size,
+            num_epochs=self.num_epochs,
             custom_reward_fn=custom_reward_fn,
         )
 
-        logger.info(f"Created AIME 2025 RLDataset with {len(dataset)} batches")
+        logger.info(
+            f"Created AIME 2025 RLDataset with {len(dataset)} batches ({self.num_epochs} epochs)"
+        )
         return dataset, None
 
 
@@ -97,6 +100,7 @@ def build_config() -> train.Config:
     builder = Aime2025DatasetBuilder(
         batch_size=4,
         group_size=8,
+        num_epochs=10,  # 10 passes through the 30 AIME problems
         max_samples=None,  # Use all 30 AIME problems
         save_rollouts=True,
     )
@@ -105,7 +109,7 @@ def build_config() -> train.Config:
         model_name=MODEL_NAME,
         dataset_builder=builder,
         learning_rate=4e-5,  # Standard RL learning rate
-        max_tokens=1024,  # Math solutions need more tokens for reasoning
+        max_tokens=16_000,  # Math solutions need more tokens for reasoning
         temperature=1.0,
         lora_rank=32,
         loss_fn="importance_sampling",
@@ -113,6 +117,8 @@ def build_config() -> train.Config:
         eval_every=0,
         save_every=5,
         num_substeps=1,
+        wandb_project="inspect-tinker-bridge",
+        wandb_name="qwen3-4B-instruct-2507-aime2025",
     )
 
 

@@ -372,9 +372,12 @@ class InspectRLDataset(types.RLDataset):
         task_name: str = "inspect",
         custom_reward_fn: CustomRewardFn | None = None,
         custom_reward_fn_timeout: float = scoring.CUSTOM_REWARD_FN_TIMEOUT,
+        num_epochs: int = 1,
     ):
         if batch_size < 1:
             raise ValueError(f"batch_size must be >= 1, got {batch_size}")
+        if num_epochs < 1:
+            raise ValueError(f"num_epochs must be >= 1, got {num_epochs}")
         self.hf_dataset = hf_dataset
         self.renderer = renderer
         self.scorers = scorers
@@ -386,6 +389,8 @@ class InspectRLDataset(types.RLDataset):
         self.task_name = task_name
         self.custom_reward_fn = custom_reward_fn
         self.custom_reward_fn_timeout = custom_reward_fn_timeout
+        self.num_epochs = num_epochs
+        self._batches_per_epoch = math.ceil(len(hf_dataset) / batch_size)
 
     def _make_env_group_builder(self, row: DatasetRowDict) -> InspectEnvGroupBuilder:
         """Convert one HF row to an EnvGroupBuilder."""
@@ -411,7 +416,9 @@ class InspectRLDataset(types.RLDataset):
     def get_batch(self, index: int) -> Sequence[types.EnvGroupBuilder]:
         if index < 0 or index >= len(self):
             raise IndexError(f"Batch index {index} out of range [0, {len(self)})")
-        start = index * self.batch_size
+        # Map global index to within-epoch index (for multi-epoch cycling)
+        epoch_index = index % self._batches_per_epoch
+        start = epoch_index * self.batch_size
         end = min(start + self.batch_size, len(self.hf_dataset))
         # HFDataset is untyped; cast rows to our expected type
         return [
@@ -420,4 +427,4 @@ class InspectRLDataset(types.RLDataset):
         ]
 
     def __len__(self) -> int:
-        return math.ceil(len(self.hf_dataset) / self.batch_size)
+        return self._batches_per_epoch * self.num_epochs
