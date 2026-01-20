@@ -103,15 +103,21 @@ async def run_inspect_scorer(
 
     # Run scorer with sandbox context if available
     score: Score | None
-    if sandbox_envs is not None:
-        from inspect_tinker_bridge import sandbox as sandbox_module
+    try:
+        if sandbox_envs is not None:
+            from inspect_tinker_bridge import sandbox as sandbox_module
 
-        logger.debug(f"Running scorer with sandbox context for sample_id={sample_id}")
-        async with sandbox_module.sandbox_context(sandbox_envs):
+            logger.debug(
+                f"Running scorer with sandbox context for sample_id={sample_id}"
+            )
+            async with sandbox_module.sandbox_context(sandbox_envs):
+                score = await scorer(task_state, target)
+        else:
+            logger.debug(f"Running scorer without sandbox for sample_id={sample_id}")
             score = await scorer(task_state, target)
-    else:
-        logger.debug(f"Running scorer without sandbox for sample_id={sample_id}")
-        score = await scorer(task_state, target)
+    except Exception:
+        logger.exception(f"Scorer raised exception for sample_id={sample_id}")
+        return None
 
     if score is not None:
         logger.debug(

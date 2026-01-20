@@ -294,3 +294,54 @@ class TestComputeRewardWithCustomFn:
 
         assert reward == 0.8
         assert metrics == {"fake_scorer_0": 0.8}
+
+
+class TestRunInspectScorer:
+    """Tests for run_inspect_scorer."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("use_sandbox", "error_msg"),
+        [
+            pytest.param(False, "Scorer failed due to invalid input", id="no_sandbox"),
+            pytest.param(True, "Sandbox scorer crashed", id="with_sandbox"),
+        ],
+    )
+    async def test_scorer_exception_returns_none_and_logs(
+        self,
+        sample_conversation: list[MessageDict],
+        sample_info: SampleInfoDict,
+        mocker: MockerFixture,
+        caplog: pytest.LogCaptureFixture,
+        use_sandbox: bool,
+        error_msg: str,
+    ) -> None:
+        """Test that scorer exceptions are caught, logged, and return None."""
+        from contextlib import asynccontextmanager
+
+        from inspect_tinker_bridge import sandbox as sandbox_module
+
+        @asynccontextmanager
+        async def mock_sandbox_context(envs: object):  # noqa: ARG001
+            yield
+
+        mocker.patch.object(
+            sandbox_module, "sandbox_context", side_effect=mock_sandbox_context
+        )
+
+        async def failing_scorer(
+            state: object,
+            target: object,  # noqa: ARG001
+        ) -> None:
+            raise ValueError(error_msg)
+
+        result = await scoring.run_inspect_scorer(
+            conversation=sample_conversation,
+            info=sample_info,
+            scorer=failing_scorer,  # pyright: ignore[reportArgumentType]
+            sandbox_envs={"default": mocker.MagicMock()} if use_sandbox else None,
+        )
+
+        assert result is None
+        assert "Scorer raised exception" in caplog.text
+        assert error_msg in caplog.text

@@ -1,6 +1,6 @@
 [project]
 name = "inspect-tinker-bridge"
-version = "0.1.0"
+version = "0.2.0"
 description = "Inspect tasks <> Tinker RL envs"
 readme = "README.md"
 authors = [
