@@ -40,7 +40,7 @@ def _ensure_docker_context() -> None:
         from inspect_ai.util._sandbox.docker.cleanup import project_cleanup_startup
 
         project_cleanup_startup()
-        logger.info("Docker sandbox context initialized successfully")
+        logger.debug("Docker sandbox context initialized successfully")
     except ImportError:
         logger.warning("Docker sandbox not available (import failed)")
 
@@ -130,7 +130,7 @@ async def create_sandbox_for_sample(
         metadata=metadata,
     )
 
-    logger.info(
+    logger.debug(
         f"Sandbox created for sample {sample_id}: {len(sandboxes)} environment(s) initialized"
     )
 
@@ -155,7 +155,7 @@ async def cleanup_sandbox(instance: SandboxInstance) -> None:
         environments=instance.environments,
         interrupted=False,
     )
-    logger.info(f"Sandbox cleanup complete for task={instance.task_name}")
+    logger.debug(f"Sandbox cleanup complete for task={instance.task_name}")
 
 
 @asynccontextmanager
