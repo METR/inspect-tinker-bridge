@@ -13,6 +13,8 @@ from typing import Any, Callable
 from tinker_cookbook.renderers import Renderer
 from tinker_cookbook.rl.rollout_saving import (
     compute_message_tokens,
+)
+from tinker_cookbook.rl.rollout_saving import (
     with_rollout_saving as _with_rollout_saving,
 )
 
@@ -85,12 +87,15 @@ def with_rollout_saving(
                 score_details[key] = {
                     "value": score_to_reward(score),
                     "answer": score.answer,
+                    "explanation": score.explanation,
                     "metadata": _safe_json_serializable(score.metadata or {}),
                 }
             else:
+                logger.warning(f"Missing score for {key}")
                 score_details[key] = {
                     "value": 0.0,
                     "answer": None,
+                    "explanation": None,
                     "metadata": {},
                 }
 

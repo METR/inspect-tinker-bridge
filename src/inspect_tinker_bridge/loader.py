@@ -10,8 +10,7 @@ from inspect_ai import Task
 from tinker_cookbook.renderers import Renderer
 
 from inspect_tinker_bridge import dataset as ds
-from inspect_tinker_bridge import scoring
-from inspect_tinker_bridge import tasks
+from inspect_tinker_bridge import scoring, tasks
 from inspect_tinker_bridge.env import InspectRLDataset
 from inspect_tinker_bridge.sandbox import SandboxConfig
 from inspect_tinker_bridge.types import CustomRewardFn
