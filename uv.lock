@@ -973,7 +973,7 @@ requires-dist = [
     { name = "inspect-ai", specifier = "~=0.3.158" },
     { name = "inspect-evals", specifier = ">=0.3.102" },
     { name = "tinker", specifier = ">=0.7.0" },
-    { name = "tinker-cookbook", extras = ["rollout-viewer"], git = "https://github.com/METR/tinker-cookbook?rev=main" },
+    { name = "tinker-cookbook", extras = ["rollout-viewer"], git = "https://github.com/METR/tinker-cookbook" },
     { name = "wandb", specifier = ">=0.24.0" },
 ]
 
@@ -3057,7 +3057,7 @@ wheels = [
 [[package]]
 name = "tinker-cookbook"
 version = "0.1.0"
-source = { git = "https://github.com/METR/tinker-cookbook?rev=main#8bb3add43ed449d9b406e4d36920123d84b63b89" }
+source = { git = "https://github.com/METR/tinker-cookbook#0014f89d250b56ed2fcb2601004c005e5370329c" }
 dependencies = [
     { name = "anyio" },
     { name = "blobfile" },

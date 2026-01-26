@@ -54,5 +54,4 @@ allowedUntypedLibraries = [
 ]
 
 [tool.uv.sources]
-tinker-cookbook = { git = "https://github.com/METR/tinker-cookbook", rev = "main" }
-
+tinker-cookbook = { git = "https://github.com/METR/tinker-cookbook" }
