@@ -28,6 +28,8 @@ def load_environment(
     num_envs_per_group: int = 1,
     batch_size: int = 1,
     num_epochs: int = 1,
+    shuffle: bool = False,
+    shuffle_seed: int | None = None,
     sandbox_type: str | None = None,
     sandbox_config: str | None = None,
     submit_instruction: str
@@ -50,6 +52,8 @@ def load_environment(
         num_envs_per_group: Number of parallel rollouts per problem (for GRPO, etc.)
         batch_size: Number of problems per batch
         num_epochs: Number of passes through the dataset (default: 1)
+        shuffle: Whether to shuffle dataset indices per epoch (default: False)
+        shuffle_seed: Seed for shuffle RNG. If None, uses 0 when shuffle=True.
         sandbox_type: Override sandbox type (e.g., "docker", "local")
         sandbox_config: Sandbox configuration file path
         submit_instruction: Instruction appended to system prompt for multi-turn
@@ -92,7 +96,7 @@ def load_environment(
         f"Loading environment: env_type={env_type}, "
         f"max_samples={max_samples}, max_turns={max_turns}, "
         f"num_envs_per_group={num_envs_per_group}, batch_size={batch_size}, "
-        f"num_epochs={num_epochs}"
+        f"num_epochs={num_epochs}, shuffle={shuffle}"
     )
 
     # Load and introspect the task
@@ -158,4 +162,6 @@ def load_environment(
         custom_reward_fn=custom_reward_fn,
         custom_reward_fn_timeout=custom_reward_fn_timeout,
         num_epochs=num_epochs,
+        shuffle=shuffle,
+        shuffle_seed=shuffle_seed,
     )

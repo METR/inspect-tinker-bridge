@@ -13,6 +13,7 @@ import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
+from random import Random
 from typing import Literal, cast
 
 import tinker
@@ -373,6 +374,8 @@ class InspectRLDataset(types.RLDataset):
         custom_reward_fn: CustomRewardFn | None = None,
         custom_reward_fn_timeout: float = scoring.CUSTOM_REWARD_FN_TIMEOUT,
         num_epochs: int = 1,
+        shuffle: bool = False,
+        shuffle_seed: int | None = None,
     ):
         if batch_size < 1:
             raise ValueError(f"batch_size must be >= 1, got {batch_size}")
@@ -390,6 +393,8 @@ class InspectRLDataset(types.RLDataset):
         self.custom_reward_fn = custom_reward_fn
         self.custom_reward_fn_timeout = custom_reward_fn_timeout
         self.num_epochs = num_epochs
+        self.shuffle = shuffle
+        self.shuffle_seed = shuffle_seed
         self._batches_per_epoch = math.ceil(len(hf_dataset) / batch_size)
 
     def _make_env_group_builder(self, row: DatasetRowDict) -> InspectEnvGroupBuilder:
@@ -413,16 +418,30 @@ class InspectRLDataset(types.RLDataset):
             dataset_name=self.task_name,
         )
 
+    def _get_epoch_indices(self, epoch: int) -> list[int]:
+        """Get dataset indices for a given epoch, shuffled if enabled."""
+        indices = list(range(len(self.hf_dataset)))
+        if self.shuffle:
+            seed = self.shuffle_seed if self.shuffle_seed is not None else 0
+            Random(seed + epoch).shuffle(indices)
+        return indices
+
     def get_batch(self, index: int) -> Sequence[types.EnvGroupBuilder]:
         if index < 0 or index >= len(self):
             raise IndexError(f"Batch index {index} out of range [0, {len(self)})")
-        # Map global index to within-epoch index (for multi-epoch cycling)
+        # Map global index to epoch and within-epoch index
+        epoch = index // self._batches_per_epoch
         epoch_index = index % self._batches_per_epoch
+
+        indices = self._get_epoch_indices(epoch)
         start = epoch_index * self.batch_size
-        end = min(start + self.batch_size, len(self.hf_dataset))
+        end = min(start + self.batch_size, len(indices))
+
         # HFDataset is untyped; cast rows to our expected type
         return [
-            self._make_env_group_builder(cast(DatasetRowDict, self.hf_dataset[i]))
+            self._make_env_group_builder(
+                cast(DatasetRowDict, self.hf_dataset[indices[i]])
+            )
             for i in range(start, end)
         ]
 

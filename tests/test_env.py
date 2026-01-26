@@ -341,3 +341,138 @@ class TestMessageConversion:
 
         assert result["role"] == "user"
         assert result["content"] == "What is 2+2?"
+
+
+class TestInspectRLDatasetShuffle:
+    """Tests for InspectRLDataset shuffle functionality."""
+
+    @pytest.fixture
+    def hf_dataset_10(self) -> HFDataset:
+        """Create a 10-sample HF dataset for shuffle tests."""
+        return HFDataset.from_list(
+            [
+                {
+                    "prompt": [{"role": "user", "content": f"q{i}"}],
+                    "answer": str(i),
+                    "info": {"inspect_sample_id": f"sample_{i}"},
+                }
+                for i in range(10)
+            ]
+        )
+
+    def _get_batch_sample_ids(
+        self, dataset: env.InspectRLDataset, batch_index: int
+    ) -> list[str | int | None]:
+        """Extract sample IDs from a batch for comparison."""
+        batch = dataset.get_batch(batch_index)
+        return [
+            builder.env_thunk().sample_info.get("inspect_sample_id")
+            for builder in batch
+            if isinstance(builder, env.InspectEnvGroupBuilder)
+        ]
+
+    @pytest.mark.parametrize(
+        ("shuffle", "seed", "expected_different"),
+        [
+            pytest.param(False, None, False, id="no_shuffle_same_order"),
+            pytest.param(True, 42, True, id="shuffle_changes_order"),
+        ],
+    )
+    def test_shuffle_changes_batch_order(
+        self,
+        hf_dataset_10: HFDataset,
+        shuffle: bool,
+        seed: int | None,
+        expected_different: bool,
+    ) -> None:
+        """Test that shuffle parameter changes batch order."""
+        # Create unshuffled dataset for comparison
+        unshuffled = env.InspectRLDataset(
+            hf_dataset=hf_dataset_10,
+            renderer=FakeRenderer(),  # type: ignore[arg-type]
+            scorers=[],
+            env_type="single_turn",
+            max_turns=1,
+            sandbox_config=None,
+            batch_size=10,
+            shuffle=False,
+        )
+
+        # Create test dataset with specified shuffle settings
+        shuffled = env.InspectRLDataset(
+            hf_dataset=hf_dataset_10,
+            renderer=FakeRenderer(),  # type: ignore[arg-type]
+            scorers=[],
+            env_type="single_turn",
+            max_turns=1,
+            sandbox_config=None,
+            batch_size=10,
+            shuffle=shuffle,
+            shuffle_seed=seed,
+        )
+
+        unshuffled_ids = self._get_batch_sample_ids(unshuffled, 0)
+        shuffled_ids = self._get_batch_sample_ids(shuffled, 0)
+
+        if expected_different:
+            assert unshuffled_ids != shuffled_ids
+        else:
+            assert unshuffled_ids == shuffled_ids
+
+    def test_shuffle_reproducible_with_seed(
+        self,
+        hf_dataset_10: HFDataset,
+    ) -> None:
+        """Test that shuffle is reproducible with the same seed."""
+        dataset1 = env.InspectRLDataset(
+            hf_dataset=hf_dataset_10,
+            renderer=FakeRenderer(),  # type: ignore[arg-type]
+            scorers=[],
+            env_type="single_turn",
+            max_turns=1,
+            sandbox_config=None,
+            batch_size=10,
+            shuffle=True,
+            shuffle_seed=42,
+        )
+
+        dataset2 = env.InspectRLDataset(
+            hf_dataset=hf_dataset_10,
+            renderer=FakeRenderer(),  # type: ignore[arg-type]
+            scorers=[],
+            env_type="single_turn",
+            max_turns=1,
+            sandbox_config=None,
+            batch_size=10,
+            shuffle=True,
+            shuffle_seed=42,
+        )
+
+        ids1 = self._get_batch_sample_ids(dataset1, 0)
+        ids2 = self._get_batch_sample_ids(dataset2, 0)
+
+        assert ids1 == ids2
+
+    def test_shuffle_different_per_epoch(
+        self,
+        hf_dataset_10: HFDataset,
+    ) -> None:
+        """Test that different epochs have different shuffle orders."""
+        dataset = env.InspectRLDataset(
+            hf_dataset=hf_dataset_10,
+            renderer=FakeRenderer(),  # type: ignore[arg-type]
+            scorers=[],
+            env_type="single_turn",
+            max_turns=1,
+            sandbox_config=None,
+            batch_size=10,
+            num_epochs=2,
+            shuffle=True,
+            shuffle_seed=42,
+        )
+
+        # batch_size=10 with 10 samples = 1 batch per epoch
+        ids_epoch_0 = self._get_batch_sample_ids(dataset, 0)
+        ids_epoch_1 = self._get_batch_sample_ids(dataset, 1)
+
+        assert ids_epoch_0 != ids_epoch_1
