@@ -74,16 +74,18 @@ async def sample_to_row(
     # Store all Inspect-specific data in info for later use
     # Note: inspect_metadata is serialized to JSON string because pyarrow
     # can't handle dicts with varying schemas across samples
-    # Note: sandbox type is complex at runtime (can include SandboxEnvironmentSpec)
-    # but we only serialize string/tuple forms
-    sandbox_serializable: str | tuple[str, str] | None = None
-    if isinstance(sample.sandbox, (str, tuple)):
-        sandbox_serializable = sample.sandbox
-    elif sample.sandbox is not None:
-        raise ValueError(
-            f"Unsupported sandbox type for serialization: {type(sample.sandbox)}. "
-            "Only string or tuple[str, str] sandbox specs are supported."
-        )
+    # Serialize sandbox config to tuple format for pyarrow compatibility
+    # SandboxEnvironmentSpec is the normalized form at runtime
+    sandbox_serializable: tuple[str, str | None] | None = None
+    if sample.sandbox is not None:
+        # sample.sandbox is always SandboxEnvironmentSpec (Inspect normalizes on creation)
+        config = sample.sandbox.config
+        if config is not None and not isinstance(config, str):
+            raise ValueError(
+                f"Only string sandbox configs (file paths) are supported for serialization, "
+                f"got {type(config).__name__}. BaseModel configs are not yet supported."
+            )
+        sandbox_serializable = (sample.sandbox.type, config)
 
     info: SampleInfoDict = {
         "inspect_sample_id": sample.id,
