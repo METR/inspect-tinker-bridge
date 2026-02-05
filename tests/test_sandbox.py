@@ -1,7 +1,7 @@
 """Tests for sandbox module."""
 
 import pytest
-from unittest.mock import MagicMock, patch
+from pytest_mock import MockerFixture
 
 from inspect_tinker_bridge.sandbox import SandboxConfig, create_sandbox_for_sample
 from inspect_tinker_bridge.types import SampleInfoDict
@@ -34,6 +34,7 @@ class TestPerSampleSandboxConfig:
     )
     async def test_sandbox_config_resolution(
         self,
+        mocker: MockerFixture,
         sample_sandbox: tuple[str, str] | None,
         task_config_path: str | None,
         expected_config: str,
@@ -52,25 +53,24 @@ class TestPerSampleSandboxConfig:
             else None
         )
 
-        with (
-            patch(
-                "inspect_tinker_bridge.sandbox.registry_find_sandboxenv"
-            ) as mock_registry,
-            patch(
-                "inspect_tinker_bridge.sandbox.init_sandbox_environments_sample"
-            ) as mock_init,
-            patch("inspect_tinker_bridge.sandbox._ensure_docker_context"),
-        ):
-            mock_registry.return_value = MagicMock()
-            mock_init.return_value = {"default": MagicMock()}
+        mock_registry = mocker.patch(
+            "inspect_tinker_bridge.sandbox.registry_find_sandboxenv",
+            return_value=mocker.MagicMock(),
+        )
+        mock_init = mocker.patch(
+            "inspect_tinker_bridge.sandbox.init_sandbox_environments_sample",
+            return_value={"default": mocker.MagicMock()},
+        )
+        mocker.patch("inspect_tinker_bridge.sandbox._ensure_docker_context")
 
-            await create_sandbox_for_sample(
-                sample_info, "test_task", task_config, sandbox_timeout=120
-            )
+        await create_sandbox_for_sample(
+            sample_info, "test_task", task_config, sandbox_init_timeout=120
+        )
 
-            mock_init.assert_called_once()
-            assert mock_init.call_args is not None
-            assert mock_init.call_args[1]["config"] == expected_config
+        mock_registry.assert_called_once()
+        mock_init.assert_called_once()
+        assert mock_init.call_args is not None
+        assert mock_init.call_args[1]["config"] == expected_config
 
     @pytest.mark.asyncio
     async def test_error_when_no_config_available(self) -> None:
@@ -85,5 +85,5 @@ class TestPerSampleSandboxConfig:
 
         with pytest.raises(ValueError, match="No sandbox config for sample"):
             await create_sandbox_for_sample(
-                sample_info, "test_task", None, sandbox_timeout=120
+                sample_info, "test_task", None, sandbox_init_timeout=120
             )

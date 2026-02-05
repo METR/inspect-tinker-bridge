@@ -6,9 +6,15 @@ import pytest
 from datasets import Dataset as HFDataset
 from inspect_ai.scorer import Scorer
 from pytest_mock import MockerFixture
-from tinker_cookbook.renderers import Message, TextPart, ThinkingPart
+from tinker_cookbook.renderers import (
+    Message,
+    TextPart,
+    ThinkingPart,
+    ToolCall as TinkerToolCall,
+)
 
-from inspect_tinker_bridge import env
+from inspect_tinker_bridge import env, sandbox as sandbox_module
+from inspect_tinker_bridge.env import DEFAULT_TOOL_TIMEOUT, MAX_TOOL_TIMEOUT
 from inspect_tinker_bridge.types import MessageDict, SampleInfoDict
 
 
@@ -221,7 +227,7 @@ class TestInspectRLDataset:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
-            sandbox_timeout=120,
+            sandbox_init_timeout=120,
             batch_size=3,
         )
 
@@ -247,7 +253,7 @@ class TestInspectRLDataset:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
-            sandbox_timeout=120,
+            sandbox_init_timeout=120,
             batch_size=2,
             num_envs_per_group=3,
         )
@@ -273,7 +279,7 @@ class TestInspectRLDataset:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
-            sandbox_timeout=120,
+            sandbox_init_timeout=120,
             num_envs_per_group=5,
         )
 
@@ -397,7 +403,7 @@ class TestInspectRLDatasetShuffle:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
-            sandbox_timeout=120,
+            sandbox_init_timeout=120,
             batch_size=10,
             shuffle=False,
         )
@@ -410,7 +416,7 @@ class TestInspectRLDatasetShuffle:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
-            sandbox_timeout=120,
+            sandbox_init_timeout=120,
             batch_size=10,
             shuffle=shuffle,
             shuffle_seed=seed,
@@ -436,7 +442,7 @@ class TestInspectRLDatasetShuffle:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
-            sandbox_timeout=120,
+            sandbox_init_timeout=120,
             batch_size=10,
             shuffle=True,
             shuffle_seed=42,
@@ -449,7 +455,7 @@ class TestInspectRLDatasetShuffle:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
-            sandbox_timeout=120,
+            sandbox_init_timeout=120,
             batch_size=10,
             shuffle=True,
             shuffle_seed=42,
@@ -472,7 +478,7 @@ class TestInspectRLDatasetShuffle:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
-            sandbox_timeout=120,
+            sandbox_init_timeout=120,
             batch_size=10,
             num_epochs=2,
             shuffle=True,
@@ -484,3 +490,174 @@ class TestInspectRLDatasetShuffle:
         ids_epoch_1 = self._get_batch_sample_ids(dataset, 1)
 
         assert ids_epoch_0 != ids_epoch_1
+
+
+def _make_tool_call(name: str, arguments: str, tool_id: str = "tc_0") -> TinkerToolCall:
+    """Helper to create a TinkerToolCall for testing."""
+    return TinkerToolCall(
+        function=TinkerToolCall.FunctionBody(name=name, arguments=arguments),
+        id=tool_id,
+    )
+
+
+class TestSetTimeout:
+    """Tests for set_timeout tool handler."""
+
+    def _make_env(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        tool_timeout: int = DEFAULT_TOOL_TIMEOUT,
+    ) -> env.InspectEnv:
+        return env.InspectEnv(
+            sample_info=sample_info,
+            prompt_messages=prompt_messages,
+            answer="4",
+            renderer=FakeRenderer(),  # type: ignore[arg-type]
+            scorers=[],
+            env_type="multi_turn",
+            tool_timeout=tool_timeout,
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("timeout_val", "expected_stored"),
+        [
+            pytest.param(600, 600, id="int_value"),
+            pytest.param(600.0, 600, id="float_cast_to_int"),
+            pytest.param(1, 1, id="minimum_valid"),
+            pytest.param(
+                MAX_TOOL_TIMEOUT + 1000, MAX_TOOL_TIMEOUT, id="clamped_to_max"
+            ),
+        ],
+    )
+    async def test_set_timeout_valid_values(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        timeout_val: int | float,
+        expected_stored: int,
+    ) -> None:
+        e = self._make_env(sample_info, prompt_messages)
+        tc = _make_tool_call("set_timeout", f'{{"timeout": {timeout_val}}}')
+
+        results = await e._execute_tools([tc])
+
+        assert len(results) == 1
+        assert results[0]["content"] == f"Timeout set to {expected_stored}"
+        assert e._current_tool_timeout == expected_stored
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "args_json",
+        [
+            pytest.param('{"timeout": 0}', id="zero"),
+            pytest.param('{"timeout": -1}', id="negative"),
+            pytest.param('{"timeout": "not_a_number"}', id="string_value"),
+            pytest.param("{}", id="missing_key"),
+            pytest.param('{"timeout": true}', id="bool_true"),
+            pytest.param('{"timeout": false}', id="bool_false"),
+        ],
+    )
+    async def test_set_timeout_invalid_values(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        args_json: str,
+    ) -> None:
+        original = DEFAULT_TOOL_TIMEOUT
+        e = self._make_env(sample_info, prompt_messages)
+        tc = _make_tool_call("set_timeout", args_json)
+
+        results = await e._execute_tools([tc])
+
+        assert len(results) == 1
+        assert (
+            f"Invalid set_timeout function call, timeout remains {original} seconds"
+            in results[0]["content"]
+        )
+        assert e._current_tool_timeout == original
+
+    @pytest.mark.asyncio
+    async def test_set_timeout_malformed_json(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+    ) -> None:
+        """Malformed JSON returns generic JSON error, not set_timeout-specific error."""
+        e = self._make_env(sample_info, prompt_messages)
+        tc = _make_tool_call("set_timeout", "invalid json")
+
+        results = await e._execute_tools([tc])
+
+        assert len(results) == 1
+        assert "Invalid JSON in tool arguments" in results[0]["content"]
+        assert e._current_tool_timeout == DEFAULT_TOOL_TIMEOUT
+
+    @pytest.mark.asyncio
+    async def test_set_timeout_sub_one_float_floors_to_one(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+    ) -> None:
+        """Floats between 0 and 1 are floored to 1, not truncated to 0."""
+        e = self._make_env(sample_info, prompt_messages)
+        tc = _make_tool_call("set_timeout", '{"timeout": 0.5}')
+
+        results = await e._execute_tools([tc])
+
+        assert results[0]["content"] == "Timeout set to 1"
+        assert e._current_tool_timeout == 1
+
+    @pytest.mark.asyncio
+    async def test_set_timeout_applied_to_execution(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        mocker: MockerFixture,
+    ) -> None:
+        """Verify set_timeout changes the timeout used in sandbox exec calls."""
+        e = self._make_env(sample_info, prompt_messages)
+        # Give the env a fake sandbox instance
+        e.sandbox_instance = mocker.MagicMock()
+        e.sandbox_instance.environments = {"default": mocker.MagicMock()}
+
+        mock_exec = mocker.patch.object(
+            sandbox_module,
+            "exec_in_sandbox",
+            return_value=mocker.MagicMock(stdout="ok", stderr=""),
+        )
+
+        # Set timeout to 300, then run bash
+        set_tc = _make_tool_call("set_timeout", '{"timeout": 300}', tool_id="tc_0")
+        bash_tc = _make_tool_call("bash", '{"command": "echo hi"}', tool_id="tc_1")
+
+        await e._execute_tools([set_tc, bash_tc])
+
+        mock_exec.assert_called_once()
+        assert mock_exec.call_args[1]["timeout"] == 300
+
+    @pytest.mark.asyncio
+    async def test_timeout_lifecycle(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+    ) -> None:
+        """Verify per-rollout state is set at init and reset by initial_observation."""
+        e = self._make_env(sample_info, prompt_messages, tool_timeout=600)
+
+        # Available immediately after __init__
+        assert e._current_tool_timeout == 600
+        assert e._submitted is False
+        assert e.current_turn == 0
+
+        # Simulate mid-rollout state
+        e._current_tool_timeout = 42
+        e._submitted = True
+        e.current_turn = 5
+
+        # initial_observation resets all per-rollout state
+        await e.initial_observation()
+        assert e._current_tool_timeout == 600
+        assert e._submitted is False
+        assert e.current_turn == 0

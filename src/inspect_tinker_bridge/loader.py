@@ -11,7 +11,7 @@ from tinker_cookbook.renderers import Renderer
 
 from inspect_tinker_bridge import dataset as ds
 from inspect_tinker_bridge import scoring, tasks
-from inspect_tinker_bridge.env import InspectRLDataset
+from inspect_tinker_bridge.env import DEFAULT_TOOL_TIMEOUT, InspectRLDataset
 from inspect_tinker_bridge.sandbox import SandboxConfig
 from inspect_tinker_bridge.types import CustomRewardFn
 
@@ -32,7 +32,8 @@ def load_environment(
     shuffle_seed: int | None = None,
     sandbox_type: str | None = None,
     sandbox_config: str | None = None,
-    sandbox_timeout: int = 120,
+    sandbox_init_timeout: int = 120,
+    tool_timeout: int = DEFAULT_TOOL_TIMEOUT,
     submit_instruction: str
     | None = "You must call submit() when you are done to complete the task.",
     custom_reward_fn: CustomRewardFn | None = None,
@@ -57,7 +58,9 @@ def load_environment(
         shuffle_seed: Seed for shuffle RNG. If None, uses 0 when shuffle=True.
         sandbox_type: Override sandbox type (e.g., "docker", "local")
         sandbox_config: Sandbox configuration file path
-        sandbox_timeout: Timeout in seconds for sandbox operations (default: 120)
+        sandbox_init_timeout: Timeout in seconds for sandbox init operations (default: 120)
+        tool_timeout: Default per-tool execution timeout in seconds (default: 1800).
+            Agents can override this at runtime via the set_timeout tool.
         submit_instruction: Instruction appended to system prompt for multi-turn
             environments explaining how to use the submit tool.
             - str: Use custom instruction
@@ -158,7 +161,8 @@ def load_environment(
         env_type=env_type,
         max_turns=max_turns,
         task_sandbox_config=sandbox_cfg,
-        sandbox_timeout=sandbox_timeout,
+        sandbox_init_timeout=sandbox_init_timeout,
+        tool_timeout=tool_timeout,
         num_envs_per_group=num_envs_per_group,
         batch_size=batch_size,
         task_name=task_info.name,

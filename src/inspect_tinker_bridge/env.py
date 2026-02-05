@@ -34,6 +34,9 @@ from inspect_tinker_bridge.types import (
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_TOOL_TIMEOUT = 1800  # 30 minutes, matching metr-agents
+MAX_TOOL_TIMEOUT = 3600  # 1 hour cap to prevent resource exhaustion
+
 
 def _tool_error_message(tool_id: str, tool_name: str, error: str) -> Message:
     """Create a tool error message."""
@@ -62,7 +65,8 @@ class InspectEnv(types.Env):
         env_type: Literal["single_turn", "multi_turn"],
         max_turns: int = 1,
         task_sandbox_config: sandbox_module.SandboxConfig | None = None,
-        sandbox_timeout: int = 120,
+        sandbox_init_timeout: int = 120,
+        tool_timeout: int = DEFAULT_TOOL_TIMEOUT,
         task_name: str = "inspect",
         custom_reward_fn: CustomRewardFn | None = None,
         custom_reward_fn_timeout: float = scoring.CUSTOM_REWARD_FN_TIMEOUT,
@@ -75,7 +79,8 @@ class InspectEnv(types.Env):
         self.env_type = env_type
         self.max_turns = max_turns
         self.task_sandbox_config = task_sandbox_config
-        self.sandbox_timeout = sandbox_timeout
+        self.sandbox_init_timeout = sandbox_init_timeout
+        self.tool_timeout = tool_timeout
         self.task_name = task_name
         self.custom_reward_fn = custom_reward_fn
         self.custom_reward_fn_timeout = custom_reward_fn_timeout
@@ -85,12 +90,18 @@ class InspectEnv(types.Env):
         self.current_turn = 0
         self.sandbox_instance: sandbox_module.SandboxInstance | None = None
         self._submitted = False
+        self._current_tool_timeout = tool_timeout
 
     async def initial_observation(
         self,
     ) -> tuple[types.Observation, StopCondition]:
         """Create sandbox if needed, return tokenized prompt."""
         try:
+            # Reset per-rollout state
+            self._current_tool_timeout = self.tool_timeout
+            self._submitted = False
+            self.current_turn = 0
+
             # Create sandbox if task-level config OR per-sample config exists
             if (
                 self.task_sandbox_config
@@ -100,7 +111,7 @@ class InspectEnv(types.Env):
                     self.sample_info,
                     self.task_name,
                     self.task_sandbox_config,
-                    self.sandbox_timeout,
+                    self.sandbox_init_timeout,
                 )
 
             # Convert prompt messages to Tinker format
@@ -218,6 +229,7 @@ class InspectEnv(types.Env):
             tool_name = tc.function.name
             tool_id = tc.id if tc.id else f"tc_{i}"
 
+            # submit has no args to parse
             if tool_name == "submit":
                 self._submitted = True
                 results.append(
@@ -228,19 +240,49 @@ class InspectEnv(types.Env):
                         name="submit",
                     )
                 )
-            elif tool_name in ("bash", "python"):
-                # Execute command in sandbox
-                args = tc.function.arguments
-                try:
-                    args_dict: dict[str, object] = json.loads(args)
-                except json.JSONDecodeError as e:
+                continue
+
+            # All other tools require JSON args
+            args = tc.function.arguments
+            try:
+                args_dict: dict[str, object] = json.loads(args)
+            except json.JSONDecodeError as e:
+                results.append(
+                    _tool_error_message(
+                        tool_id,
+                        tool_name,
+                        f"Invalid JSON in tool arguments: {e}",
+                    )
+                )
+                continue
+
+            if tool_name == "set_timeout":
+                timeout_val = args_dict.get("timeout")
+                if (
+                    not isinstance(timeout_val, (int, float))
+                    or isinstance(timeout_val, bool)
+                    or not math.isfinite(timeout_val)
+                    or timeout_val <= 0
+                ):
                     results.append(
                         _tool_error_message(
-                            tool_id, tool_name, f"Invalid JSON in tool arguments: {e}"
+                            tool_id,
+                            tool_name,
+                            f"Invalid set_timeout function call, timeout remains {self._current_tool_timeout} seconds",
                         )
                     )
                     continue
-
+                clamped = min(max(1, int(timeout_val)), MAX_TOOL_TIMEOUT)
+                self._current_tool_timeout = clamped
+                results.append(
+                    Message(
+                        role="tool",
+                        content=f"Timeout set to {clamped}",
+                        tool_call_id=tool_id,
+                        name="set_timeout",
+                    )
+                )
+            elif tool_name in ("bash", "python"):
                 cmd: list[str]
                 if tool_name == "bash":
                     if "command" not in args_dict:
@@ -269,7 +311,7 @@ class InspectEnv(types.Env):
                     exec_result = await sandbox_module.exec_in_sandbox(
                         self.sandbox_instance.environments,
                         cmd,
-                        timeout=60,
+                        timeout=self._current_tool_timeout,
                     )
                     output = exec_result.stdout or ""
                     if exec_result.stderr:
@@ -288,7 +330,6 @@ class InspectEnv(types.Env):
                     )
                 )
             else:
-                # Unknown tool
                 results.append(
                     _tool_error_message(
                         tool_id, tool_name, f"Unknown tool: {tool_name}"
@@ -376,7 +417,8 @@ class InspectRLDataset(types.RLDataset):
         env_type: Literal["single_turn", "multi_turn"],
         max_turns: int,
         task_sandbox_config: sandbox_module.SandboxConfig | None,
-        sandbox_timeout: int,
+        sandbox_init_timeout: int,
+        tool_timeout: int = DEFAULT_TOOL_TIMEOUT,
         num_envs_per_group: int = 1,
         batch_size: int = 1,
         task_name: str = "inspect",
@@ -396,7 +438,8 @@ class InspectRLDataset(types.RLDataset):
         self.env_type: Literal["single_turn", "multi_turn"] = env_type
         self.max_turns = max_turns
         self.task_sandbox_config = task_sandbox_config
-        self.sandbox_timeout = sandbox_timeout
+        self.sandbox_init_timeout = sandbox_init_timeout
+        self.tool_timeout = tool_timeout
         self.num_envs_per_group = num_envs_per_group
         self.batch_size = batch_size
         self.task_name = task_name
@@ -420,7 +463,8 @@ class InspectRLDataset(types.RLDataset):
                 env_type=self.env_type,
                 max_turns=self.max_turns,
                 task_sandbox_config=self.task_sandbox_config,
-                sandbox_timeout=self.sandbox_timeout,
+                sandbox_init_timeout=self.sandbox_init_timeout,
+                tool_timeout=self.tool_timeout,
                 task_name=self.task_name,
                 custom_reward_fn=self.custom_reward_fn,
                 custom_reward_fn_timeout=self.custom_reward_fn_timeout,
