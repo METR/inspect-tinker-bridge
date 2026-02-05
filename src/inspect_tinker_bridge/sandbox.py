@@ -82,32 +82,42 @@ async def create_sandbox_for_sample(
     """
     sample_id = sample_info.get("inspect_sample_id", "unknown")
 
-    # Check for per-sample sandbox configuration (not yet supported)
+    # Determine effective sandbox config: per-sample overrides task-level
     per_sample_sandbox = sample_info.get("inspect_sandbox")
-    if per_sample_sandbox is not None:
-        raise NotImplementedError(
-            f"Per-sample sandbox configuration is not yet supported. "
-            f"Sample has sandbox={per_sample_sandbox}, but only task-level sandbox config is used."
-        )
 
-    if task_sandbox_config is None:
+    effective_config: SandboxConfig
+    if per_sample_sandbox is not None:
+        # Per-sample sandbox: (type, config) tuple
+        sandbox_type, config_path = per_sample_sandbox
+        effective_config = SandboxConfig(
+            sandbox_type=sandbox_type,
+            config=config_path,
+            timeout=task_sandbox_config.timeout if task_sandbox_config else 120,
+        )
+        logger.debug(
+            f"Using per-sample sandbox for {sample_id}: type={sandbox_type}, config={config_path}"
+        )
+    elif task_sandbox_config is not None:
+        effective_config = task_sandbox_config
+        logger.debug(f"Using task-level sandbox for {sample_id}")
+    else:
         raise ValueError(
             f"No sandbox config for sample {sample_id}: "
             "neither per-sample nor task-level sandbox configured"
         )
 
     logger.debug(
-        f"Creating sandbox for sample {sample_id}: type={task_sandbox_config.sandbox_type}, "
+        f"Creating sandbox for sample {sample_id}: type={effective_config.sandbox_type}, "
         f"task={task_name}"
     )
 
     # Initialize Docker context if using Docker sandbox
-    if task_sandbox_config.sandbox_type == "docker":
+    if effective_config.sandbox_type == "docker":
         _ensure_docker_context()
 
     # Get the sandbox environment class
-    logger.debug(f"Looking up sandbox environment class: {task_sandbox_config.sandbox_type}")
-    sandbox_cls = registry_find_sandboxenv(task_sandbox_config.sandbox_type)
+    logger.debug(f"Looking up sandbox environment class: {effective_config.sandbox_type}")
+    sandbox_cls = registry_find_sandboxenv(effective_config.sandbox_type)
 
     # Resolve files using Inspect's resolution (handles data URIs, HTTP URLs, file paths)
     files_raw: dict[str, str] = sample_info.get("inspect_files") or {}
@@ -131,7 +141,7 @@ async def create_sandbox_for_sample(
     sandboxes = await init_sandbox_environments_sample(
         sandboxenv_type=sandbox_cls,
         task_name=task_name,
-        config=task_sandbox_config.config,
+        config=effective_config.config,
         files=files_bytes,
         setup=setup_bytes,
         metadata=metadata,
@@ -143,8 +153,8 @@ async def create_sandbox_for_sample(
 
     return SandboxInstance(
         environments=sandboxes,
-        sandbox_type=task_sandbox_config.sandbox_type,
-        config=task_sandbox_config.config,
+        sandbox_type=effective_config.sandbox_type,
+        config=effective_config.config,
         task_name=task_name,
     )
 
