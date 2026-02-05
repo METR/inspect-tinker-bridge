@@ -116,7 +116,9 @@ async def create_sandbox_for_sample(
         _ensure_docker_context()
 
     # Get the sandbox environment class
-    logger.debug(f"Looking up sandbox environment class: {effective_config.sandbox_type}")
+    logger.debug(
+        f"Looking up sandbox environment class: {effective_config.sandbox_type}"
+    )
     sandbox_cls = registry_find_sandboxenv(effective_config.sandbox_type)
 
     # Resolve files using Inspect's resolution (handles data URIs, HTTP URLs, file paths)

@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(uv add:*)",
+      "Bash(xargs ls:*)",
+      "Bash(python:*)",
+      "Bash(gh label list:*)",
+      "Skill(design-review)",
+      "Skill(tinker)",
+      "WebSearch",
+      "Bash(uv sync:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(/Users/neev/repos/metr/inspect-tinker-bridge/.venv/lib/python3.12/site-packages/wandb/bin/wandb-core:*)",
+      "Bash(xattr:*)",
+      "Bash(codesign:*)",
+      "WebFetch(domain:tinker-docs.thinkingmachines.ai)",
+      "WebFetch(domain:inspect.aisi.org.uk)"
+    ]
+  }
+}

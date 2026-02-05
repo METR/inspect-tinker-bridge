@@ -24,12 +24,14 @@ class TestPerSampleSandboxConfig:
             timeout=60,
         )
 
-        with patch(
-            "inspect_tinker_bridge.sandbox.registry_find_sandboxenv"
-        ) as mock_registry, patch(
-            "inspect_tinker_bridge.sandbox.init_sandbox_environments_sample"
-        ) as mock_init, patch(
-            "inspect_tinker_bridge.sandbox._ensure_docker_context"
+        with (
+            patch(
+                "inspect_tinker_bridge.sandbox.registry_find_sandboxenv"
+            ) as mock_registry,
+            patch(
+                "inspect_tinker_bridge.sandbox.init_sandbox_environments_sample"
+            ) as mock_init,
+            patch("inspect_tinker_bridge.sandbox._ensure_docker_context"),
         ):
             mock_sandbox_cls = MagicMock()
             mock_registry.return_value = mock_sandbox_cls
@@ -58,12 +60,14 @@ class TestPerSampleSandboxConfig:
             timeout=60,
         )
 
-        with patch(
-            "inspect_tinker_bridge.sandbox.registry_find_sandboxenv"
-        ) as mock_registry, patch(
-            "inspect_tinker_bridge.sandbox.init_sandbox_environments_sample"
-        ) as mock_init, patch(
-            "inspect_tinker_bridge.sandbox._ensure_docker_context"
+        with (
+            patch(
+                "inspect_tinker_bridge.sandbox.registry_find_sandboxenv"
+            ) as mock_registry,
+            patch(
+                "inspect_tinker_bridge.sandbox.init_sandbox_environments_sample"
+            ) as mock_init,
+            patch("inspect_tinker_bridge.sandbox._ensure_docker_context"),
         ):
             mock_sandbox_cls = MagicMock()
             mock_registry.return_value = mock_sandbox_cls
@@ -87,12 +91,14 @@ class TestPerSampleSandboxConfig:
             "inspect_metadata": "{}",
         }
 
-        with patch(
-            "inspect_tinker_bridge.sandbox.registry_find_sandboxenv"
-        ) as mock_registry, patch(
-            "inspect_tinker_bridge.sandbox.init_sandbox_environments_sample"
-        ) as mock_init, patch(
-            "inspect_tinker_bridge.sandbox._ensure_docker_context"
+        with (
+            patch(
+                "inspect_tinker_bridge.sandbox.registry_find_sandboxenv"
+            ) as mock_registry,
+            patch(
+                "inspect_tinker_bridge.sandbox.init_sandbox_environments_sample"
+            ) as mock_init,
+            patch("inspect_tinker_bridge.sandbox._ensure_docker_context"),
         ):
             mock_sandbox_cls = MagicMock()
             mock_registry.return_value = mock_sandbox_cls
