@@ -155,7 +155,7 @@ def load_environment(
         scorers=task_info.scorers,
         env_type=env_type,
         max_turns=max_turns,
-        sandbox_config=sandbox_cfg,
+        task_sandbox_config=sandbox_cfg,
         num_envs_per_group=num_envs_per_group,
         batch_size=batch_size,
         task_name=task_info.name,

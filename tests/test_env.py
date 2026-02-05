@@ -220,7 +220,7 @@ class TestInspectRLDataset:
             scorers=[],
             env_type="single_turn",
             max_turns=1,
-            sandbox_config=None,
+            task_sandbox_config=None,
             batch_size=3,
         )
 
@@ -245,7 +245,7 @@ class TestInspectRLDataset:
             scorers=[],
             env_type="single_turn",
             max_turns=1,
-            sandbox_config=None,
+            task_sandbox_config=None,
             batch_size=2,
             num_envs_per_group=3,
         )
@@ -270,7 +270,7 @@ class TestInspectRLDataset:
             scorers=[],
             env_type="single_turn",
             max_turns=1,
-            sandbox_config=None,
+            task_sandbox_config=None,
             num_envs_per_group=5,
         )
 
@@ -393,7 +393,7 @@ class TestInspectRLDatasetShuffle:
             scorers=[],
             env_type="single_turn",
             max_turns=1,
-            sandbox_config=None,
+            task_sandbox_config=None,
             batch_size=10,
             shuffle=False,
         )
@@ -405,7 +405,7 @@ class TestInspectRLDatasetShuffle:
             scorers=[],
             env_type="single_turn",
             max_turns=1,
-            sandbox_config=None,
+            task_sandbox_config=None,
             batch_size=10,
             shuffle=shuffle,
             shuffle_seed=seed,
@@ -430,7 +430,7 @@ class TestInspectRLDatasetShuffle:
             scorers=[],
             env_type="single_turn",
             max_turns=1,
-            sandbox_config=None,
+            task_sandbox_config=None,
             batch_size=10,
             shuffle=True,
             shuffle_seed=42,
@@ -442,7 +442,7 @@ class TestInspectRLDatasetShuffle:
             scorers=[],
             env_type="single_turn",
             max_turns=1,
-            sandbox_config=None,
+            task_sandbox_config=None,
             batch_size=10,
             shuffle=True,
             shuffle_seed=42,
@@ -464,7 +464,7 @@ class TestInspectRLDatasetShuffle:
             scorers=[],
             env_type="single_turn",
             max_turns=1,
-            sandbox_config=None,
+            task_sandbox_config=None,
             batch_size=10,
             num_epochs=2,
             shuffle=True,
