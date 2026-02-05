@@ -62,6 +62,7 @@ class InspectEnv(types.Env):
         env_type: Literal["single_turn", "multi_turn"],
         max_turns: int = 1,
         task_sandbox_config: sandbox_module.SandboxConfig | None = None,
+        sandbox_timeout: int = 120,
         task_name: str = "inspect",
         custom_reward_fn: CustomRewardFn | None = None,
         custom_reward_fn_timeout: float = scoring.CUSTOM_REWARD_FN_TIMEOUT,
@@ -74,6 +75,7 @@ class InspectEnv(types.Env):
         self.env_type = env_type
         self.max_turns = max_turns
         self.task_sandbox_config = task_sandbox_config
+        self.sandbox_timeout = sandbox_timeout
         self.task_name = task_name
         self.custom_reward_fn = custom_reward_fn
         self.custom_reward_fn_timeout = custom_reward_fn_timeout
@@ -88,15 +90,19 @@ class InspectEnv(types.Env):
         self,
     ) -> tuple[types.Observation, StopCondition]:
         """Create sandbox if needed, return tokenized prompt."""
-        # Create sandbox if task-level config OR per-sample config exists
-        has_sample_sandbox = self.sample_info.get("inspect_sandbox") is not None
-
-        if self.task_sandbox_config or has_sample_sandbox:
-            self.sandbox_instance = await sandbox_module.create_sandbox_for_sample(
-                self.sample_info, self.task_name, self.task_sandbox_config
-            )
-
         try:
+            # Create sandbox if task-level config OR per-sample config exists
+            if (
+                self.task_sandbox_config
+                or self.sample_info.get("inspect_sandbox") is not None
+            ):
+                self.sandbox_instance = await sandbox_module.create_sandbox_for_sample(
+                    self.sample_info,
+                    self.task_name,
+                    self.task_sandbox_config,
+                    self.sandbox_timeout,
+                )
+
             # Convert prompt messages to Tinker format
             self.conversation = [self._dict_to_message(m) for m in self.prompt_messages]
 
@@ -370,6 +376,7 @@ class InspectRLDataset(types.RLDataset):
         env_type: Literal["single_turn", "multi_turn"],
         max_turns: int,
         task_sandbox_config: sandbox_module.SandboxConfig | None,
+        sandbox_timeout: int,
         num_envs_per_group: int = 1,
         batch_size: int = 1,
         task_name: str = "inspect",
@@ -389,6 +396,7 @@ class InspectRLDataset(types.RLDataset):
         self.env_type: Literal["single_turn", "multi_turn"] = env_type
         self.max_turns = max_turns
         self.task_sandbox_config = task_sandbox_config
+        self.sandbox_timeout = sandbox_timeout
         self.num_envs_per_group = num_envs_per_group
         self.batch_size = batch_size
         self.task_name = task_name
@@ -412,6 +420,7 @@ class InspectRLDataset(types.RLDataset):
                 env_type=self.env_type,
                 max_turns=self.max_turns,
                 task_sandbox_config=self.task_sandbox_config,
+                sandbox_timeout=self.sandbox_timeout,
                 task_name=self.task_name,
                 custom_reward_fn=self.custom_reward_fn,
                 custom_reward_fn_timeout=self.custom_reward_fn_timeout,

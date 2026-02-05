@@ -25,6 +25,8 @@ def sample_context() -> ScoringContext:
             inspect_sample_id="test",
             inspect_input_raw="test",
             inspect_target_raw="answer",
+            inspect_metadata="{}",
+            inspect_sandbox=None,
             inspect_task_name="test",
         ),
         scores={},
@@ -201,6 +203,8 @@ def sample_info() -> SampleInfoDict:
         inspect_sample_id="test",
         inspect_input_raw="test",
         inspect_target_raw="answer",
+        inspect_metadata="{}",
+        inspect_sandbox=None,
         inspect_task_name="test",
     )
 

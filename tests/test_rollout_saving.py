@@ -25,6 +25,8 @@ def sample_context() -> ScoringContext:
             inspect_sample_id="test_123",
             inspect_input_raw="What is 2+2?",
             inspect_target_raw="4",
+            inspect_metadata="{}",
+            inspect_sandbox=None,
             inspect_task_name="math_task",
         ),
         scores={},
@@ -219,6 +221,8 @@ class TestWithRolloutSavingWrapper:
                 inspect_sample_id="test",
                 inspect_input_raw="test",
                 inspect_target_raw="answer",
+                inspect_metadata="{}",
+                inspect_sandbox=None,
                 inspect_task_name="test",
             ),
             scores={
@@ -260,6 +264,8 @@ class TestWithRolloutSavingWrapper:
                 inspect_sample_id="test",
                 inspect_input_raw="test",
                 inspect_target_raw="answer",
+                inspect_metadata="{}",
+                inspect_sandbox=None,
                 inspect_task_name="test",
             ),
             scores={
@@ -294,8 +300,11 @@ class TestWithRolloutSavingWrapper:
         ctx = ScoringContext(
             conversation=[MessageDict(role="user", content="test")],
             sample_info=SampleInfoDict(
+                inspect_sample_id=None,
                 inspect_input_raw="test",
                 inspect_target_raw="answer",
+                inspect_metadata="{}",
+                inspect_sandbox=None,
                 inspect_task_name="test",
             ),
             scores={},

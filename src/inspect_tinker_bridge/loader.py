@@ -32,6 +32,7 @@ def load_environment(
     shuffle_seed: int | None = None,
     sandbox_type: str | None = None,
     sandbox_config: str | None = None,
+    sandbox_timeout: int = 120,
     submit_instruction: str
     | None = "You must call submit() when you are done to complete the task.",
     custom_reward_fn: CustomRewardFn | None = None,
@@ -56,6 +57,7 @@ def load_environment(
         shuffle_seed: Seed for shuffle RNG. If None, uses 0 when shuffle=True.
         sandbox_type: Override sandbox type (e.g., "docker", "local")
         sandbox_config: Sandbox configuration file path
+        sandbox_timeout: Timeout in seconds for sandbox operations (default: 120)
         submit_instruction: Instruction appended to system prompt for multi-turn
             environments explaining how to use the submit tool.
             - str: Use custom instruction
@@ -156,6 +158,7 @@ def load_environment(
         env_type=env_type,
         max_turns=max_turns,
         task_sandbox_config=sandbox_cfg,
+        sandbox_timeout=sandbox_timeout,
         num_envs_per_group=num_envs_per_group,
         batch_size=batch_size,
         task_name=task_info.name,

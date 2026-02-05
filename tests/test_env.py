@@ -221,6 +221,7 @@ class TestInspectRLDataset:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
+            sandbox_timeout=120,
             batch_size=3,
         )
 
@@ -246,6 +247,7 @@ class TestInspectRLDataset:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
+            sandbox_timeout=120,
             batch_size=2,
             num_envs_per_group=3,
         )
@@ -271,6 +273,7 @@ class TestInspectRLDataset:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
+            sandbox_timeout=120,
             num_envs_per_group=5,
         )
 
@@ -394,6 +397,7 @@ class TestInspectRLDatasetShuffle:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
+            sandbox_timeout=120,
             batch_size=10,
             shuffle=False,
         )
@@ -406,6 +410,7 @@ class TestInspectRLDatasetShuffle:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
+            sandbox_timeout=120,
             batch_size=10,
             shuffle=shuffle,
             shuffle_seed=seed,
@@ -431,6 +436,7 @@ class TestInspectRLDatasetShuffle:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
+            sandbox_timeout=120,
             batch_size=10,
             shuffle=True,
             shuffle_seed=42,
@@ -443,6 +449,7 @@ class TestInspectRLDatasetShuffle:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
+            sandbox_timeout=120,
             batch_size=10,
             shuffle=True,
             shuffle_seed=42,
@@ -465,6 +472,7 @@ class TestInspectRLDatasetShuffle:
             env_type="single_turn",
             max_turns=1,
             task_sandbox_config=None,
+            sandbox_timeout=120,
             batch_size=10,
             num_epochs=2,
             shuffle=True,

@@ -58,4 +58,4 @@ class TestSampleSandboxSerialization:
             sandbox=sandbox_input,
         )
         row = await sample_to_row(sample, minimal_task, "test_task")
-        assert row["info"].get("inspect_sandbox") == expected_serialized
+        assert row["info"]["inspect_sandbox"] == expected_serialized

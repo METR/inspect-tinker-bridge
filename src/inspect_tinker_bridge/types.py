@@ -51,14 +51,15 @@ class SampleInfoDict(TypedDict, total=False):
     Info dict stored in HuggingFace dataset for each sample.
 
     Contains all Inspect-specific metadata needed for scoring and sandbox setup.
+    Required keys are always set during dataset conversion in dataset.py.
     """
 
-    inspect_sample_id: str | int | None
+    inspect_sample_id: Required[str | int | None]
     inspect_input_raw: str | list[MessageDict]
     inspect_target_raw: str | list[str] | None
     inspect_choices: list[str] | None
-    inspect_metadata: str  # JSON-serialized dict for pyarrow compatibility
-    inspect_sandbox: tuple[str, str | None] | None  # (type, config) tuple
+    inspect_metadata: Required[str]  # JSON-serialized dict for pyarrow compatibility
+    inspect_sandbox: Required[tuple[str, str | None] | None]  # (type, config) tuple
     inspect_files: dict[str, str] | None
     inspect_setup: str | None
     inspect_task_name: str

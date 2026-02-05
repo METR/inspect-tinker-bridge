@@ -68,6 +68,7 @@ async def create_sandbox_for_sample(
     sample_info: SampleInfoDict,
     task_name: str,
     task_sandbox_config: SandboxConfig | None,
+    sandbox_timeout: int,
 ) -> SandboxInstance:
     """
     Create sandbox environment(s) for a sample.
@@ -76,11 +77,12 @@ async def create_sandbox_for_sample(
         sample_info: The info dict from the converted sample
         task_name: Name of the task
         task_sandbox_config: Task-level sandbox configuration (fallback if sample has none)
+        sandbox_timeout: Timeout in seconds for sandbox operations
 
     Returns:
         SandboxInstance containing environments and metadata for cleanup
     """
-    sample_id = sample_info.get("inspect_sample_id", "unknown")
+    sample_id = sample_info["inspect_sample_id"]
 
     # Determine effective sandbox config: per-sample overrides task-level
     per_sample_sandbox = sample_info.get("inspect_sandbox")
@@ -92,7 +94,7 @@ async def create_sandbox_for_sample(
         effective_config = SandboxConfig(
             sandbox_type=sandbox_type,
             config=config_path,
-            timeout=task_sandbox_config.timeout if task_sandbox_config else 120,
+            timeout=sandbox_timeout,
         )
         logger.debug(
             f"Using per-sample sandbox for {sample_id}: type={sandbox_type}, config={config_path}"
