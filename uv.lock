@@ -946,7 +946,7 @@ wheels = [
 
 [[package]]
 name = "inspect-tinker-bridge"
-version = "0.2.2"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "datasets" },
@@ -973,7 +973,7 @@ requires-dist = [
     { name = "inspect-ai", specifier = "~=0.3.158" },
     { name = "inspect-evals", specifier = ">=0.3.102" },
     { name = "tinker", specifier = ">=0.7.0" },
-    { name = "tinker-cookbook", extras = ["rollout-viewer"], git = "https://github.com/METR/tinker-cookbook" },
+    { name = "tinker-cookbook", extras = ["rollout-viewer"], git = "https://github.com/METR/tinker-cookbook?branch=main" },
     { name = "wandb", specifier = ">=0.24.0" },
 ]
 
@@ -3034,7 +3034,7 @@ wheels = [
 
 [[package]]
 name = "tinker"
-version = "0.7.0"
+version = "0.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -3045,19 +3045,18 @@ dependencies = [
     { name = "pydantic" },
     { name = "rich" },
     { name = "sniffio" },
-    { name = "torch" },
     { name = "transformers" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/42/cd/356bf1e6b07e8e10389755446796d232dcb65e7ffcc038634dd341dfcef7/tinker-0.7.0.tar.gz", hash = "sha256:d0dee451a082453f9429109e66f36d311e18f6152a7c8a0f5cde3ea7301abe1e", size = 186798, upload-time = "2025-12-08T00:06:56.124Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/3d/880f1f5a5bd0cd7741a3976e625c9d8fe019c9f3de6acf320ff3a0e001cb/tinker-0.12.0.tar.gz", hash = "sha256:b74bb49b8477b7a9f6eb5c6cc71fb387d7878c5f2edb96069fc53a26bf7e24d2", size = 177857, upload-time = "2026-02-06T06:27:36.347Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8e/d5/19b08f6af72e6bf66b2632021c55eab3d27f379c47974ada1b8a5d469f30/tinker-0.7.0-py3-none-any.whl", hash = "sha256:078f6f4e55b0f22bc147c7ea119862fa16b14095d425a92c058b3f35db53ba55", size = 166385, upload-time = "2025-12-08T00:06:54.628Z" },
+    { url = "https://files.pythonhosted.org/packages/77/03/a4761beda7357a5df2631bc47a35d047c99b58119fe985c6f61c11bee215/tinker-0.12.0-py3-none-any.whl", hash = "sha256:014c1c07bb41ad5b3aa6ed9f89b2ecdd689535e6e19d56de7ec476eb9c534899", size = 173215, upload-time = "2026-02-06T06:27:38.112Z" },
 ]
 
 [[package]]
 name = "tinker-cookbook"
 version = "0.1.0"
-source = { git = "https://github.com/METR/tinker-cookbook#0014f89d250b56ed2fcb2601004c005e5370329c" }
+source = { git = "https://github.com/METR/tinker-cookbook?branch=main#8694dca9e99133db57ba610ff3177a401ee2b764" }
 dependencies = [
     { name = "anyio" },
     { name = "blobfile" },
@@ -3223,7 +3222,7 @@ wheels = [
 
 [[package]]
 name = "transformers"
-version = "4.56.2"
+version = "4.57.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -3237,9 +3236,9 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e5/82/0bcfddd134cdf53440becb5e738257cc3cf34cf229d63b57bfd288e6579f/transformers-4.56.2.tar.gz", hash = "sha256:5e7c623e2d7494105c726dd10f6f90c2c99a55ebe86eef7233765abd0cb1c529", size = 9844296, upload-time = "2025-09-19T15:16:26.778Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c4/35/67252acc1b929dc88b6602e8c4a982e64f31e733b804c14bc24b47da35e6/transformers-4.57.6.tar.gz", hash = "sha256:55e44126ece9dc0a291521b7e5492b572e6ef2766338a610b9ab5afbb70689d3", size = 10134912, upload-time = "2026-01-16T10:38:39.284Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/26/2591b48412bde75e33bfd292034103ffe41743cacd03120e3242516cd143/transformers-4.56.2-py3-none-any.whl", hash = "sha256:79c03d0e85b26cb573c109ff9eafa96f3c8d4febfd8a0774e8bba32702dd6dde", size = 11608055, upload-time = "2025-09-19T15:16:23.736Z" },
+    { url = "https://files.pythonhosted.org/packages/03/b8/e484ef633af3887baeeb4b6ad12743363af7cce68ae51e938e00aaa0529d/transformers-4.57.6-py3-none-any.whl", hash = "sha256:4c9e9de11333ddfe5114bc872c9f370509198acf0b87a832a0ab9458e2bd0550", size = 11993498, upload-time = "2026-01-16T10:38:31.289Z" },
 ]
 
 [[package]]
