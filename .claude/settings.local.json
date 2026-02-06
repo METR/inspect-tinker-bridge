@@ -15,7 +15,16 @@
       "Bash(xattr:*)",
       "Bash(codesign:*)",
       "WebFetch(domain:tinker-docs.thinkingmachines.ai)",
-      "WebFetch(domain:inspect.aisi.org.uk)"
+      "WebFetch(domain:inspect.aisi.org.uk)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(python3:*)",
+      "Bash(for f in 1901db97-df30-47eb-8c15-8a3587f47bc7.jsonl a7157d4c-458d-49d3-8170-8e73c27e5a3c.jsonl 55dc6873-812f-457a-9bb4-8b9f0762c7fa.jsonl 241de4db-8cc3-4f26-95ca-a7076e6f31d2.jsonl)",
+      "Bash(do)",
+      "Bash(done)",
+      "Bash(for f in 4e344c72-c2dd-4c51-9c75-f0a780eafc24.jsonl 8e030b38-649b-4de4-9bf9-86bb9d3eb2fb.jsonl 8c554f81-075e-4134-952f-fd25443278a4.jsonl 73dec9f8-929e-4823-8e4f-b899894206a5.jsonl 74088ef4-8226-4628-ad5a-92ef360a6d83.jsonl d36558f1-5ad9-4bda-97c3-72f2493ee3dc.jsonl ce586f32-155d-4baa-a0dc-08e6b2db6cbe.jsonl 08f69068-e853-4b6e-b39b-500568731d4a.jsonl)",
+      "Bash(for f in e25222ab-5002-4d0e-9768-35cacc911a68.jsonl 5bc7ed6f-b79d-4084-8822-3b0456386783.jsonl 062432c5-2c18-4ef0-86f7-1b2e2af7f506.jsonl 9b0962ef-96f5-416d-a3f5-fe3b5fe6419d.jsonl)",
+      "Bash(for f in d36033f4-e035-4653-b32f-fa78cd3a1dc3.jsonl 0645b06d-1329-4d18-b05f-588c1ccf8272.jsonl b0c5d4bf-fb7b-487f-abf9-ae2790c9192e.jsonl 90771452-1766-4655-bbfb-ba8cbe9bd465.jsonl)",
+      "Bash(.venv/bin/python:*)"
     ]
   }
 }
