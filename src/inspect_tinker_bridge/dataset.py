@@ -93,6 +93,7 @@ async def sample_to_row(
         "inspect_target_raw": sample.target,
         "inspect_choices": sample.choices,
         "inspect_metadata": json.dumps(sample.metadata or {}),
+        "inspect_eval_metadata": json.dumps(task.metadata or {}),
         "inspect_sandbox": sandbox_serializable,
         "inspect_files": sample.files,
         "inspect_setup": sample.setup,

@@ -46,6 +46,7 @@ class TestPerSampleSandboxConfig:
             "inspect_files": None,
             "inspect_setup": None,
             "inspect_metadata": "{}",
+            "inspect_eval_metadata": "{}",
         }
         task_config = (
             SandboxConfig(sandbox_type="docker", config=task_config_path, timeout=60)
@@ -81,6 +82,7 @@ class TestPerSampleSandboxConfig:
             "inspect_files": None,
             "inspect_setup": None,
             "inspect_metadata": "{}",
+            "inspect_eval_metadata": "{}",
         }
 
         with pytest.raises(ValueError, match="No sandbox config for sample"):

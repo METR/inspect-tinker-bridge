@@ -26,6 +26,7 @@ def sample_context() -> ScoringContext:
             inspect_input_raw="test",
             inspect_target_raw="answer",
             inspect_metadata="{}",
+            inspect_eval_metadata="{}",
             inspect_sandbox=None,
             inspect_task_name="test",
         ),
@@ -204,6 +205,7 @@ def sample_info() -> SampleInfoDict:
         inspect_input_raw="test",
         inspect_target_raw="answer",
         inspect_metadata="{}",
+        inspect_eval_metadata="{}",
         inspect_sandbox=None,
         inspect_task_name="test",
     )
@@ -349,3 +351,50 @@ class TestRunInspectScorer:
         assert result is None
         assert "Scorer raised exception" in caplog.text
         assert error_msg in caplog.text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("eval_metadata_json", "expected_eval_metadata"),
+        [
+            pytest.param(
+                '{"side_task_correctness_scorer_name": "side_task_correctness"}',
+                '{"side_task_correctness_scorer_name": "side_task_correctness"}',
+                id="with_eval_metadata",
+            ),
+            pytest.param("{}", None, id="empty_eval_metadata"),
+        ],
+    )
+    async def test_eval_metadata_injected_into_task_state(
+        self,
+        sample_conversation: list[MessageDict],
+        eval_metadata_json: str,
+        expected_eval_metadata: str | None,
+    ) -> None:
+        """Test that eval_metadata from info is injected into TaskState.metadata."""
+        captured_state = None
+
+        async def capturing_scorer(state: object, target: object) -> None:  # noqa: ARG001
+            nonlocal captured_state
+            captured_state = state
+
+        info = SampleInfoDict(
+            inspect_sample_id="test",
+            inspect_input_raw="test",
+            inspect_target_raw="answer",
+            inspect_metadata="{}",
+            inspect_eval_metadata=eval_metadata_json,
+            inspect_sandbox=None,
+            inspect_task_name="test",
+        )
+
+        await scoring.run_inspect_scorer(
+            conversation=sample_conversation,
+            info=info,
+            scorer=capturing_scorer,  # pyright: ignore[reportArgumentType]
+        )
+
+        assert captured_state is not None
+        if expected_eval_metadata is not None:
+            assert captured_state.metadata["eval_metadata"] == expected_eval_metadata  # pyright: ignore[reportAttributeAccessIssue]
+        else:
+            assert "eval_metadata" not in captured_state.metadata  # pyright: ignore[reportAttributeAccessIssue]

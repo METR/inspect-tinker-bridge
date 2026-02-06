@@ -65,6 +65,7 @@ def sample_info() -> SampleInfoDict:
         inspect_target_raw="4",
         inspect_choices=None,
         inspect_metadata='{"difficulty": "easy"}',
+        inspect_eval_metadata="{}",
         inspect_sandbox=None,
         inspect_files=None,
         inspect_setup=None,

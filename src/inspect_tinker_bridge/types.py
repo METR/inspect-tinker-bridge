@@ -59,6 +59,7 @@ class SampleInfoDict(TypedDict, total=False):
     inspect_target_raw: str | list[str] | None
     inspect_choices: list[str] | None
     inspect_metadata: Required[str]  # JSON-serialized dict for pyarrow compatibility
+    inspect_eval_metadata: Required[str]  # JSON-serialized task.metadata (eval-level)
     inspect_sandbox: Required[tuple[str, str | None] | None]  # (type, config) tuple
     inspect_files: dict[str, str] | None
     inspect_setup: str | None

@@ -1,5 +1,7 @@
 """Tests for dataset module."""
 
+import json
+
 import pytest
 from inspect_ai import Task
 from inspect_ai.dataset import Sample
@@ -59,3 +61,30 @@ class TestSampleSandboxSerialization:
         )
         row = await sample_to_row(sample, minimal_task, "test_task")
         assert row["info"]["inspect_sandbox"] == expected_serialized
+
+
+class TestEvalMetadataSerialization:
+    @pytest.mark.asyncio
+    async def test_task_metadata_serialized_as_eval_metadata(self) -> None:
+        """Test that task.metadata is serialized into inspect_eval_metadata."""
+        task = Task(
+            dataset=[Sample(input="dummy", target="dummy", id="dummy")],
+            solver=generate(),
+            scorer=match(),
+            name="test_task",
+            metadata={"side_task_correctness_scorer_name": "side_task_correctness"},
+        )
+        sample = Sample(input="test input", target="test target", id="test-1")
+        row = await sample_to_row(sample, task, "test_task")
+        eval_metadata = json.loads(row["info"]["inspect_eval_metadata"])
+        assert (
+            eval_metadata["side_task_correctness_scorer_name"]
+            == "side_task_correctness"
+        )
+
+    @pytest.mark.asyncio
+    async def test_empty_task_metadata_serialized(self, minimal_task: Task) -> None:
+        """Test that empty/None task.metadata serializes to empty dict."""
+        sample = Sample(input="test input", target="test target", id="test-1")
+        row = await sample_to_row(sample, minimal_task, "test_task")
+        assert row["info"]["inspect_eval_metadata"] == "{}"

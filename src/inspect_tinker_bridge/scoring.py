@@ -86,6 +86,12 @@ async def run_inspect_scorer(
     metadata_raw = info.get("inspect_metadata", "{}")
     metadata = parse_metadata_json(metadata_raw)
 
+    # Inject eval-level metadata (task.metadata) so scorers can access it
+    # The downstream scanner expects metadata["eval_metadata"] as a JSON string
+    eval_metadata_raw = info["inspect_eval_metadata"]
+    if eval_metadata_raw != "{}":
+        metadata["eval_metadata"] = eval_metadata_raw
+
     # sample_id can be None but TaskState expects int | str
     # Use a default when None
     effective_sample_id: int | str = sample_id if sample_id is not None else "unknown"
