@@ -357,7 +357,7 @@ def _build_inspect_messages(messages: list[MessageDict]) -> list[ChatMessage]:
         role = msg["role"]
         content = msg["content"]
 
-        if role == "system":
+        if role in ("system", "developer"):
             result.append(ChatMessageSystem(content=content))
         elif role == "user":
             result.append(ChatMessageUser(content=content))
