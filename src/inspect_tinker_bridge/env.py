@@ -25,6 +25,7 @@ from tinker_cookbook.renderers import Message, Renderer, ToolCall as TinkerToolC
 
 from inspect_tinker_bridge import sandbox as sandbox_module
 from inspect_tinker_bridge import scoring
+from inspect_tinker_bridge.tools import BUILT_IN_TOOL_SPECS
 from inspect_tinker_bridge.types import (
     CustomRewardFn,
     DatasetRowDict,
@@ -36,6 +37,33 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TOOL_TIMEOUT = 1800  # 30 minutes, matching metr-agents
 MAX_TOOL_TIMEOUT = 3600  # 1 hour cap to prevent resource exhaustion
+
+
+def _prepend_tool_definitions(
+    renderer: Renderer, conversation: list[Message]
+) -> list[Message]:
+    system_prompt = ""
+    remaining = list(conversation)
+
+    if remaining and remaining[0]["role"] == "system":
+        content = remaining.pop(0)["content"]
+        assert isinstance(content, str), (
+            f"Expected string system prompt, got {type(content)}"
+        )
+        system_prompt = content
+
+    try:
+        prefix = renderer.create_conversation_prefix_with_tools(
+            BUILT_IN_TOOL_SPECS, system_prompt
+        )
+    except NotImplementedError:
+        logger.warning(
+            "Renderer %s does not support tool definitions, skipping injection",
+            type(renderer).__name__,
+        )
+        return conversation
+
+    return prefix + remaining
 
 
 def _tool_error_message(tool_id: str, tool_name: str, error: str) -> Message:
@@ -116,6 +144,11 @@ class InspectEnv(types.Env):
 
             # Convert prompt messages to Tinker format
             self.conversation = [self._dict_to_message(m) for m in self.prompt_messages]
+
+            if self.env_type == "multi_turn":
+                self.conversation = _prepend_tool_definitions(
+                    self.renderer, self.conversation
+                )
 
             return (
                 self.renderer.build_generation_prompt(self.conversation),

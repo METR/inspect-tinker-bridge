@@ -1,6 +1,7 @@
 """Tests for env module."""
 
-from typing import Any
+import logging
+from typing import Any, Literal
 
 import pytest
 from datasets import Dataset as HFDataset
@@ -11,6 +12,7 @@ from tinker_cookbook.renderers import (
     TextPart,
     ThinkingPart,
     ToolCall as TinkerToolCall,
+    ToolSpec,
 )
 
 from inspect_tinker_bridge import env, sandbox as sandbox_module
@@ -41,6 +43,15 @@ class FakeRenderer:
 
     def parse_response(self, action: list[int]) -> tuple[Message, bool]:
         return Message(role="assistant", content="4"), True
+
+    def create_conversation_prefix_with_tools(
+        self, tools: list[ToolSpec], system_prompt: str = ""
+    ) -> list[Message]:
+        tool_names = ", ".join(t["name"] for t in tools)
+        content = f"Tools: {tool_names}"
+        if system_prompt:
+            content = f"{system_prompt}\n{content}"
+        return [Message(role="system", content=content)]
 
     def to_openai_message(self, m: Message) -> dict[str, Any]:
         """Convert a Message to OpenAI API format with reasoning_content extraction.
@@ -661,3 +672,107 @@ class TestSetTimeout:
         assert e._current_tool_timeout == 600
         assert e._submitted is False
         assert e.current_turn == 0
+
+
+class FakeRendererNoTools(FakeRenderer):
+    """Renderer that does not support tool definitions."""
+
+    def create_conversation_prefix_with_tools(
+        self, tools: list[ToolSpec], system_prompt: str = ""
+    ) -> list[Message]:
+        raise NotImplementedError
+
+
+class TestToolDefinitionInjection:
+    """Tests for tool definition injection into multi-turn prompts."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("env_type", "has_system_msg", "expect_prefix"),
+        [
+            pytest.param("multi_turn", True, True, id="multiturn_with_system_msg"),
+            pytest.param("multi_turn", False, True, id="multiturn_no_system_msg"),
+            pytest.param("single_turn", True, False, id="single_turn_no_injection"),
+        ],
+    )
+    async def test_tool_definition_injection(
+        self,
+        sample_info: SampleInfoDict,
+        env_type: Literal["single_turn", "multi_turn"],
+        has_system_msg: bool,
+        expect_prefix: bool,
+    ) -> None:
+        renderer = FakeRenderer()
+
+        prompt_messages: list[MessageDict] = []
+        if has_system_msg:
+            prompt_messages.append(
+                MessageDict(role="system", content="You are helpful.")
+            )
+        prompt_messages.append(MessageDict(role="user", content="What is 2 + 2?"))
+
+        e = env.InspectEnv(
+            sample_info=sample_info,
+            prompt_messages=prompt_messages,
+            answer="4",
+            renderer=renderer,  # type: ignore[arg-type]
+            scorers=[],
+            env_type=env_type,
+            max_turns=10,
+        )
+
+        await e.initial_observation()
+
+        if expect_prefix:
+            assert e.conversation[0]["role"] == "system"
+            content = e.conversation[0]["content"]
+            assert isinstance(content, str)
+            assert "bash" in content
+            assert "python" in content
+            assert "submit" in content
+            assert "set_timeout" in content
+
+            if has_system_msg:
+                assert "You are helpful." in content
+                assert all(m["role"] != "system" for m in e.conversation[1:])
+            assert e.conversation[-1]["role"] == "user"
+            assert e.conversation[-1]["content"] == "What is 2 + 2?"
+        else:
+            if has_system_msg:
+                assert e.conversation[0]["role"] == "system"
+                content = e.conversation[0]["content"]
+                assert isinstance(content, str)
+                assert "bash" not in content
+            else:
+                assert e.conversation[0]["role"] == "user"
+
+    @pytest.mark.asyncio
+    async def test_unsupported_renderer_logs_warning(
+        self,
+        sample_info: SampleInfoDict,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        renderer = FakeRendererNoTools()
+        prompt_messages = [
+            MessageDict(role="system", content="System prompt"),
+            MessageDict(role="user", content="Hello"),
+        ]
+
+        e = env.InspectEnv(
+            sample_info=sample_info,
+            prompt_messages=prompt_messages,
+            answer="4",
+            renderer=renderer,  # type: ignore[arg-type]
+            scorers=[],
+            env_type="multi_turn",
+            max_turns=10,
+        )
+
+        with caplog.at_level(logging.WARNING):
+            await e.initial_observation()
+
+        assert "does not support tool definitions" in caplog.text
+        # Conversation should be unchanged
+        assert len(e.conversation) == 2
+        assert e.conversation[0]["role"] == "system"
+        assert e.conversation[1]["role"] == "user"
