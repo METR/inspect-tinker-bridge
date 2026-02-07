@@ -15,7 +15,7 @@ from tinker_cookbook.renderers import (
     ToolSpec,
 )
 
-from inspect_tinker_bridge import env, sandbox as sandbox_module
+from inspect_tinker_bridge import env, sandbox as sandbox_module, truncation
 from inspect_tinker_bridge.env import DEFAULT_TOOL_TIMEOUT, MAX_TOOL_TIMEOUT
 from inspect_tinker_bridge.types import MessageDict, SampleInfoDict
 
@@ -776,3 +776,138 @@ class TestToolDefinitionInjection:
         assert len(e.conversation) == 2
         assert e.conversation[0]["role"] == "system"
         assert e.conversation[1]["role"] == "user"
+
+
+class TestToolOutputTruncation:
+    """Tests for tool output truncation in _execute_tools."""
+
+    def _make_env(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        max_tool_output: int = truncation.DEFAULT_MAX_TOOL_OUTPUT,
+    ) -> env.InspectEnv:
+        return env.InspectEnv(
+            sample_info=sample_info,
+            prompt_messages=prompt_messages,
+            answer="4",
+            renderer=FakeRenderer(),  # type: ignore[arg-type]
+            scorers=[],
+            env_type="multi_turn",
+            max_tool_output=max_tool_output,
+        )
+
+    @pytest.mark.asyncio
+    async def test_short_output_not_truncated(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        mocker: MockerFixture,
+    ) -> None:
+        e = self._make_env(sample_info, prompt_messages, max_tool_output=1000)
+        e.sandbox_instance = mocker.MagicMock()
+        e.sandbox_instance.environments = {"default": mocker.MagicMock()}
+
+        mocker.patch.object(
+            sandbox_module,
+            "exec_in_sandbox",
+            return_value=mocker.MagicMock(stdout="short output", stderr=""),
+        )
+
+        tc = _make_tool_call("bash", '{"command": "echo hi"}')
+        results = await e._execute_tools([tc])
+
+        assert results[0]["content"] == "short output"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "tool_name",
+        [
+            pytest.param("bash", id="bash_tool"),
+            pytest.param("python", id="python_tool"),
+        ],
+    )
+    async def test_long_output_truncated_with_markers(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        mocker: MockerFixture,
+        tool_name: str,
+    ) -> None:
+        e = self._make_env(sample_info, prompt_messages, max_tool_output=50)
+        e.sandbox_instance = mocker.MagicMock()
+        e.sandbox_instance.environments = {"default": mocker.MagicMock()}
+
+        mocker.patch.object(
+            sandbox_module,
+            "exec_in_sandbox",
+            return_value=mocker.MagicMock(stdout="x" * 200, stderr=""),
+        )
+
+        args_key = "command" if tool_name == "bash" else "code"
+        tc = _make_tool_call(tool_name, f'{{"{args_key}": "echo hi"}}')
+        results = await e._execute_tools([tc])
+
+        content = results[0]["content"]
+        assert f"call to {tool_name} was too long" in content
+        assert "<START_TOOL_OUTPUT>" in content
+        assert "<END_TOOL_OUTPUT>" in content
+
+    @pytest.mark.asyncio
+    async def test_stderr_combined_output_truncated(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        mocker: MockerFixture,
+    ) -> None:
+        """Combined stdout+stderr exceeding limit gets truncated."""
+        e = self._make_env(sample_info, prompt_messages, max_tool_output=50)
+        e.sandbox_instance = mocker.MagicMock()
+        e.sandbox_instance.environments = {"default": mocker.MagicMock()}
+
+        mocker.patch.object(
+            sandbox_module,
+            "exec_in_sandbox",
+            return_value=mocker.MagicMock(stdout="o" * 100, stderr="e" * 100),
+        )
+
+        tc = _make_tool_call("bash", '{"command": "echo hi"}')
+        results = await e._execute_tools([tc])
+
+        content = results[0]["content"]
+        assert "call to bash was too long" in content
+        assert "<START_TOOL_OUTPUT>" in content
+
+    @pytest.mark.asyncio
+    async def test_max_tool_output_parameter_flows(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+    ) -> None:
+        """max_tool_output flows from InspectRLDataset through to InspectEnv."""
+        hf_dataset = HFDataset.from_list(
+            [
+                {
+                    "prompt": [{"role": "user", "content": "q"}],
+                    "answer": "",
+                    "info": {},
+                }
+            ]
+        )
+
+        dataset = env.InspectRLDataset(
+            hf_dataset=hf_dataset,
+            renderer=FakeRenderer(),  # type: ignore[arg-type]
+            scorers=[],
+            env_type="multi_turn",
+            max_turns=10,
+            task_sandbox_config=None,
+            sandbox_init_timeout=120,
+            max_tool_output=8192,
+        )
+
+        builders = dataset.get_batch(0)
+        builder = builders[0]
+        assert isinstance(builder, env.InspectEnvGroupBuilder)
+        created_env = builder.env_thunk()
+        assert created_env.max_tool_output == 8192

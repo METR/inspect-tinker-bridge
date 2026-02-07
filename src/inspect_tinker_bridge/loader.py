@@ -10,7 +10,7 @@ from inspect_ai import Task
 from tinker_cookbook.renderers import Renderer
 
 from inspect_tinker_bridge import dataset as ds
-from inspect_tinker_bridge import scoring, tasks
+from inspect_tinker_bridge import scoring, tasks, truncation
 from inspect_tinker_bridge.env import DEFAULT_TOOL_TIMEOUT, InspectRLDataset
 from inspect_tinker_bridge.sandbox import SandboxConfig
 from inspect_tinker_bridge.types import CustomRewardFn
@@ -34,6 +34,7 @@ def load_environment(
     sandbox_config: str | None = None,
     sandbox_init_timeout: int = 120,
     tool_timeout: int = DEFAULT_TOOL_TIMEOUT,
+    max_tool_output: int = truncation.DEFAULT_MAX_TOOL_OUTPUT,
     submit_instruction: str
     | None = "You must call submit() when you are done to complete the task.",
     custom_reward_fn: CustomRewardFn | None = None,
@@ -61,6 +62,8 @@ def load_environment(
         sandbox_init_timeout: Timeout in seconds for sandbox init operations (default: 120)
         tool_timeout: Default per-tool execution timeout in seconds (default: 1800).
             Agents can override this at runtime via the set_timeout tool.
+        max_tool_output: Maximum tool output size in bytes before truncation (default: 16384).
+            Outputs exceeding this limit are middle-truncated with an explanatory wrapper.
         submit_instruction: Instruction appended to system prompt for multi-turn
             environments explaining how to use the submit tool.
             - str: Use custom instruction
@@ -163,6 +166,7 @@ def load_environment(
         task_sandbox_config=sandbox_cfg,
         sandbox_init_timeout=sandbox_init_timeout,
         tool_timeout=tool_timeout,
+        max_tool_output=max_tool_output,
         num_envs_per_group=num_envs_per_group,
         batch_size=batch_size,
         task_name=task_info.name,

@@ -24,7 +24,7 @@ from tinker_cookbook.rl import types
 from tinker_cookbook.renderers import Message, Renderer, ToolCall as TinkerToolCall
 
 from inspect_tinker_bridge import sandbox as sandbox_module
-from inspect_tinker_bridge import scoring
+from inspect_tinker_bridge import scoring, truncation
 from inspect_tinker_bridge.tools import BUILT_IN_TOOL_SPECS
 from inspect_tinker_bridge.types import (
     CustomRewardFn,
@@ -95,6 +95,7 @@ class InspectEnv(types.Env):
         task_sandbox_config: sandbox_module.SandboxConfig | None = None,
         sandbox_init_timeout: int = 120,
         tool_timeout: int = DEFAULT_TOOL_TIMEOUT,
+        max_tool_output: int = truncation.DEFAULT_MAX_TOOL_OUTPUT,
         task_name: str = "inspect",
         custom_reward_fn: CustomRewardFn | None = None,
         custom_reward_fn_timeout: float = scoring.CUSTOM_REWARD_FN_TIMEOUT,
@@ -109,6 +110,7 @@ class InspectEnv(types.Env):
         self.task_sandbox_config = task_sandbox_config
         self.sandbox_init_timeout = sandbox_init_timeout
         self.tool_timeout = tool_timeout
+        self.max_tool_output = max_tool_output
         self.task_name = task_name
         self.custom_reward_fn = custom_reward_fn
         self.custom_reward_fn_timeout = custom_reward_fn_timeout
@@ -351,6 +353,9 @@ class InspectEnv(types.Env):
                         output = f"{output}\nstderr: {exec_result.stderr}"
                     if not output:
                         output = "(no output)"
+                    output = truncation.truncate_tool_output(
+                        output, tool_name, self.max_tool_output
+                    )
                 else:
                     output = "Error: No sandbox available"
 
@@ -452,6 +457,7 @@ class InspectRLDataset(types.RLDataset):
         task_sandbox_config: sandbox_module.SandboxConfig | None,
         sandbox_init_timeout: int,
         tool_timeout: int = DEFAULT_TOOL_TIMEOUT,
+        max_tool_output: int = truncation.DEFAULT_MAX_TOOL_OUTPUT,
         num_envs_per_group: int = 1,
         batch_size: int = 1,
         task_name: str = "inspect",
@@ -465,6 +471,8 @@ class InspectRLDataset(types.RLDataset):
             raise ValueError(f"batch_size must be >= 1, got {batch_size}")
         if num_epochs < 1:
             raise ValueError(f"num_epochs must be >= 1, got {num_epochs}")
+        if max_tool_output < 1:
+            raise ValueError(f"max_tool_output must be >= 1, got {max_tool_output}")
         self.hf_dataset = hf_dataset
         self.renderer = renderer
         self.scorers = scorers
@@ -473,6 +481,7 @@ class InspectRLDataset(types.RLDataset):
         self.task_sandbox_config = task_sandbox_config
         self.sandbox_init_timeout = sandbox_init_timeout
         self.tool_timeout = tool_timeout
+        self.max_tool_output = max_tool_output
         self.num_envs_per_group = num_envs_per_group
         self.batch_size = batch_size
         self.task_name = task_name
@@ -498,6 +507,7 @@ class InspectRLDataset(types.RLDataset):
                 task_sandbox_config=self.task_sandbox_config,
                 sandbox_init_timeout=self.sandbox_init_timeout,
                 tool_timeout=self.tool_timeout,
+                max_tool_output=self.max_tool_output,
                 task_name=self.task_name,
                 custom_reward_fn=self.custom_reward_fn,
                 custom_reward_fn_timeout=self.custom_reward_fn_timeout,
