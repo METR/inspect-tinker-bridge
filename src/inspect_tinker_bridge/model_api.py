@@ -14,6 +14,7 @@ from inspect_ai.model import (
     ModelOutput,
     ModelUsage,
 )
+from inspect_ai.model._model import ModelAPI
 from inspect_ai.model._model_output import StopReason
 from inspect_ai.model._registry import modelapi
 from inspect_ai.tool import ToolCall as InspectToolCall, ToolChoice, ToolInfo
@@ -84,7 +85,7 @@ def _map_stop_reason(
 
 
 @modelapi("tinker_sampling")
-class TinkerSamplingAPI:
+class TinkerSamplingAPI(ModelAPI):
     """Inspect AI ModelAPI that uses Tinker's sampling endpoint.
 
     Usage:
@@ -104,8 +105,7 @@ class TinkerSamplingAPI:
         config: GenerateConfig = GenerateConfig(),
         **model_args: Any,
     ) -> None:
-        # ModelAPI base is handled by the registry wrapper; we just store our args
-        self.model_name = model_name
+        super().__init__(model_name, base_url, api_key, api_key_vars, config)
         self.renderer: renderers.Renderer = model_args["renderer"]
         self.sampling_client: tinker.SamplingClient = model_args["sampling_client"]
 
