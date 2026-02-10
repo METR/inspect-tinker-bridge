@@ -8,15 +8,10 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "inspect-ai~=0.3.158",
-    "tinker>=0.7.0",
-    "tinker-cookbook>=0.1.0",
-]
-
-[project.optional-dependencies]
-rl = [
     "datasets>=3.1.0",
+    "inspect-ai~=0.3.158",
     "inspect-evals>=0.3.102",
+    "tinker>=0.7.0",
     "tinker-cookbook[rollout-viewer]>=0.1.0",
 ]
 
