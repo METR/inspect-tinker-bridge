@@ -79,9 +79,10 @@ def _map_stop_reason(
     tool_calls: list[InspectToolCall] | None,
 ) -> StopReason:
     """Map Tinker stop reason to Inspect stop reason."""
-    if tool_calls:
+    stop = as_stop_reason(tinker_reason)
+    if stop == "stop" and tool_calls:
         return "tool_calls"
-    return as_stop_reason(tinker_reason)
+    return stop
 
 
 @modelapi("tinker_sampling")
