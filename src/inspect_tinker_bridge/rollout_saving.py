@@ -72,6 +72,16 @@ def with_rollout_saving(
 
     tokenizer = renderer.tokenizer
 
+    # Get the renderer's system message (e.g. reasoning effort, date) so we
+    # can include it in rollout records.  This is prepended at render-time by
+    # build_generation_prompt() but isn't part of env.conversation.
+    renderer_system_msg: dict[str, Any] | None = None
+    if hasattr(renderer, "_get_system_message"):
+        msg = renderer._get_system_message()  # pyright: ignore[reportAttributeAccessIssue]
+        if msg is not None:
+            renderer_system_msg = dict(msg)  # pyright: ignore[reportUnknownArgumentType]
+            renderer_system_msg["role"] = "system"
+
     def build_record(
         ctx: ScoringContext,
         total_reward: float,
@@ -99,16 +109,19 @@ def with_rollout_saving(
                     "metadata": {},
                 }
 
+        # Prepend renderer system message to get the full prompt the model saw
+        conversation = [dict(msg) for msg in ctx.conversation]
+        if renderer_system_msg is not None:
+            conversation = [renderer_system_msg] + conversation
+
         # Compute token counts
-        token_counts = [
-            compute_message_tokens(dict(msg), tokenizer) for msg in ctx.conversation
-        ]
+        token_counts = [compute_message_tokens(msg, tokenizer) for msg in conversation]
 
         return {
             "timestamp": datetime.now().isoformat(),
             "step": step,
             "sample_id": ctx.sample_info.get("inspect_sample_id"),
-            "conversation": [dict(msg) for msg in ctx.conversation],
+            "conversation": conversation,
             "token_counts": token_counts,
             "sample_info": dict(ctx.sample_info),
             "scores": score_details,

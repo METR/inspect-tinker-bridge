@@ -3071,7 +3071,7 @@ wheels = [
 [[package]]
 name = "tinker-cookbook"
 version = "0.1.0"
-source = { git = "https://github.com/METR/tinker-cookbook?branch=main#8694dca9e99133db57ba610ff3177a401ee2b764" }
+source = { git = "https://github.com/METR/tinker-cookbook?branch=main#c78007f65cc9fc8a40fefd0d2b2d71c2b1364f42" }
 dependencies = [
     { name = "anyio" },
     { name = "blobfile" },

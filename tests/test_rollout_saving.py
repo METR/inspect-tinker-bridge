@@ -143,6 +143,10 @@ def capture_build_record(mocker: MockerFixture) -> Any:
 
     mock_renderer = MagicMock()
     mock_renderer.tokenizer = MagicMock()
+    mock_renderer._get_system_message.return_value = {
+        "role": "_internal_system",
+        "content": "You are a test model.\n\nReasoning: high",
+    }
 
     rollout_saving.with_rollout_saving(
         inner_fn=_dummy_reward_fn,
@@ -205,8 +209,11 @@ class TestWithRolloutSavingWrapper:
         assert record["total_reward"] == 0.75
         assert record["renderer_name"] == "test_renderer"
         assert record["individual_rewards"] == {"scorer_0": 0.5, "scorer_1": 1.0}
-        assert len(record["conversation"]) == 2
-        assert len(record["token_counts"]) == 2
+        # 3 messages: renderer system msg + user + assistant
+        assert len(record["conversation"]) == 3
+        assert record["conversation"][0]["role"] == "system"
+        assert "Reasoning: high" in record["conversation"][0]["content"]
+        assert len(record["token_counts"]) == 3
         assert "sample_info" in record
         assert "scores" in record
 
