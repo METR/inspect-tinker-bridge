@@ -56,6 +56,8 @@ def _tinker_message_to_assistant(
     tool_calls: list[InspectToolCall] | None = None
     raw_tool_calls: list[renderers.ToolCall] | None = message.get("tool_calls")
     if raw_tool_calls:
+        # json.loads is safe here: all renderers validate JSON during tool call
+        # extraction, routing invalid JSON to unparsed_tool_calls instead.
         tool_calls = [
             InspectToolCall(
                 id=tc.id or f"tc_{i}",
@@ -161,7 +163,12 @@ class TinkerSamplingAPI(ModelAPI):
         )
 
         sequence = response.sequences[0]
-        parsed_message, _valid = self.renderer.parse_response(sequence.tokens)
+        parsed_message, valid = self.renderer.parse_response(sequence.tokens)
+        if not valid:
+            logger.warning(
+                "Renderer failed to fully parse response (e.g. missing stop token); "
+                "using best-effort message"
+            )
         assistant_msg = _tinker_message_to_assistant(parsed_message, self.model_name)
 
         stop_reason = _map_stop_reason(sequence.stop_reason, assistant_msg.tool_calls)
