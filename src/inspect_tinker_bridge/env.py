@@ -35,7 +35,7 @@ from inspect_tinker_bridge.types import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TOOL_TIMEOUT = 1800  # 30 minutes, matching metr-agents
+DEFAULT_TOOL_TIMEOUT = 300  # 5 minutes
 MAX_TOOL_TIMEOUT = 3600  # 1 hour cap to prevent resource exhaustion
 
 
