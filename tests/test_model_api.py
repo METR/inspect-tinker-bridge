@@ -1,7 +1,7 @@
 """Tests for model_api module."""
 
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import tinker
@@ -13,6 +13,7 @@ from inspect_ai.model import (
 )
 from inspect_ai.tool import ToolCall as InspectToolCall, ToolInfo
 from inspect_ai.tool._tool_params import ToolParams
+from pytest_mock import MockerFixture
 from tinker_cookbook.renderers import (
     Message,
     TextPart,
@@ -236,26 +237,55 @@ def _make_sample_response(
     )
 
 
+def _mock_init(mocker: MockerFixture, renderer: FakeRenderer | None = None) -> None:
+    """Patch the construction chain so __init__ uses fakes instead of real Tinker services."""
+    if renderer is None:
+        renderer = FakeRenderer()
+
+    mock_sampling_client = AsyncMock()
+    mock_sampling_client.sample_async.return_value = _make_sample_response()
+    mock_sampling_client.get_tokenizer.return_value = MagicMock()
+
+    mock_service_client = MagicMock()
+    mock_service_client.create_sampling_client.return_value = mock_sampling_client
+    mocker.patch("tinker.ServiceClient", return_value=mock_service_client)
+
+    mocker.patch(
+        "inspect_tinker_bridge.model_api.renderers.get_renderer",
+        return_value=renderer,
+    )
+    mocker.patch(
+        "inspect_tinker_bridge.model_api.model_info.get_recommended_renderer_name",
+        return_value="fake_renderer",
+    )
+
+
 def _make_api(
+    mocker: MockerFixture,
     renderer: FakeRenderer | None = None,
     sampling_client: Any = None,
     model_name: str = "test/model",
+    **model_args: Any,
 ) -> model_api.TinkerSamplingAPI:
     if renderer is None:
         renderer = FakeRenderer()
-    if sampling_client is None:
-        sampling_client = AsyncMock()
-        sampling_client.sample_async.return_value = _make_sample_response()
-    return model_api.TinkerSamplingAPI(
-        model_name=model_name,
-        renderer=renderer,  # pyright: ignore[reportCallIssue]
-        sampling_client=sampling_client,  # pyright: ignore[reportCallIssue]
-    )
+    _mock_init(mocker, renderer)
+
+    api = model_api.TinkerSamplingAPI(model_name=model_name, **model_args)  # pyright: ignore[reportCallIssue]
+
+    if sampling_client is not None:
+        api.sampling_client = sampling_client  # pyright: ignore[reportAttributeAccessIssue]
+    else:
+        api.sampling_client = AsyncMock()  # pyright: ignore[reportAttributeAccessIssue]
+        api.sampling_client.sample_async.return_value = _make_sample_response()  # pyright: ignore[reportAttributeAccessIssue]
+
+    api.renderer = renderer  # pyright: ignore[reportAttributeAccessIssue]
+    return api
 
 
 class TestTinkerSamplingAPIGenerate:
     @pytest.mark.asyncio
-    async def test_simple_generation(self) -> None:
+    async def test_simple_generation(self, mocker: MockerFixture) -> None:
         renderer = FakeRenderer(
             parse_result=Message(role="assistant", content="The answer is 4"),
             input_token_count=15,
@@ -264,7 +294,7 @@ class TestTinkerSamplingAPIGenerate:
         client.sample_async.return_value = _make_sample_response(
             tokens=[10, 20, 30, 40, 50]
         )
-        api = _make_api(renderer=renderer, sampling_client=client)
+        api = _make_api(mocker, renderer=renderer, sampling_client=client)
 
         result = await api.generate(
             input=[ChatMessageUser(content="What is 2+2?")],
@@ -282,11 +312,11 @@ class TestTinkerSamplingAPIGenerate:
         assert result.model == "test/model"  # pyright: ignore[reportAttributeAccessIssue]
 
     @pytest.mark.asyncio
-    async def test_tool_injection(self) -> None:
+    async def test_tool_injection(self, mocker: MockerFixture) -> None:
         renderer = FakeRenderer()
         client = AsyncMock()
         client.sample_async.return_value = _make_sample_response()
-        api = _make_api(renderer=renderer, sampling_client=client)
+        api = _make_api(mocker, renderer=renderer, sampling_client=client)
 
         tool_info = ToolInfo(
             name="bash",
@@ -314,11 +344,13 @@ class TestTinkerSamplingAPIGenerate:
         assert system_arg == "You are helpful"
 
     @pytest.mark.asyncio
-    async def test_tool_choice_none_skips_injection(self) -> None:
+    async def test_tool_choice_none_skips_injection(
+        self, mocker: MockerFixture
+    ) -> None:
         renderer = FakeRenderer()
         client = AsyncMock()
         client.sample_async.return_value = _make_sample_response()
-        api = _make_api(renderer=renderer, sampling_client=client)
+        api = _make_api(mocker, renderer=renderer, sampling_client=client)
 
         tool_info = ToolInfo(name="bash", description="Run bash")
 
@@ -332,10 +364,10 @@ class TestTinkerSamplingAPIGenerate:
         assert len(renderer.create_tools_calls) == 0
 
     @pytest.mark.asyncio
-    async def test_config_mapping(self) -> None:
+    async def test_config_mapping(self, mocker: MockerFixture) -> None:
         client = AsyncMock()
         client.sample_async.return_value = _make_sample_response()
-        api = _make_api(sampling_client=client)
+        api = _make_api(mocker, sampling_client=client)
 
         await api.generate(
             input=[ChatMessageUser(content="hi")],
@@ -360,10 +392,10 @@ class TestTinkerSamplingAPIGenerate:
         assert params.stop == ["<|end|>"]
 
     @pytest.mark.asyncio
-    async def test_config_defaults(self) -> None:
+    async def test_config_defaults(self, mocker: MockerFixture) -> None:
         client = AsyncMock()
         client.sample_async.return_value = _make_sample_response()
-        api = _make_api(sampling_client=client)
+        api = _make_api(mocker, sampling_client=client)
 
         await api.generate(
             input=[ChatMessageUser(content="hi")],
@@ -381,7 +413,7 @@ class TestTinkerSamplingAPIGenerate:
         assert params.seed is None
 
     @pytest.mark.asyncio
-    async def test_tool_calls_stop_reason(self) -> None:
+    async def test_tool_calls_stop_reason(self, mocker: MockerFixture) -> None:
         renderer = FakeRenderer(
             parse_result=Message(
                 role="assistant",
@@ -398,7 +430,7 @@ class TestTinkerSamplingAPIGenerate:
         )
         client = AsyncMock()
         client.sample_async.return_value = _make_sample_response()
-        api = _make_api(renderer=renderer, sampling_client=client)
+        api = _make_api(mocker, renderer=renderer, sampling_client=client)
 
         result = await api.generate(
             input=[ChatMessageUser(content="list files")],
@@ -411,7 +443,7 @@ class TestTinkerSamplingAPIGenerate:
         assert result.choices[0].message.tool_calls is not None  # pyright: ignore[reportAttributeAccessIssue]
 
     @pytest.mark.asyncio
-    async def test_renderer_not_implemented_tools(self) -> None:
+    async def test_renderer_not_implemented_tools(self, mocker: MockerFixture) -> None:
         """When renderer doesn't support tools, gracefully skip and re-insert system prompt."""
 
         class NoToolsRenderer(FakeRenderer):
@@ -423,7 +455,7 @@ class TestTinkerSamplingAPIGenerate:
         renderer = NoToolsRenderer()
         client = AsyncMock()
         client.sample_async.return_value = _make_sample_response()
-        api = _make_api(renderer=renderer, sampling_client=client)
+        api = _make_api(mocker, renderer=renderer, sampling_client=client)
 
         tool_info = ToolInfo(name="bash", description="Run bash")
 
@@ -441,3 +473,55 @@ class TestTinkerSamplingAPIGenerate:
         assert messages[0]["role"] == "system"
         assert messages[0]["content"] == "Be helpful"
         assert messages[1]["role"] == "user"
+
+
+class TestTinkerSamplingAPIInit:
+    def test_uses_model_path_when_provided(self, mocker: MockerFixture) -> None:
+        _mock_init(mocker)
+        model_api.TinkerSamplingAPI(
+            model_name="test/model",
+            model_path="tinker://run-1/weights/100",  # pyright: ignore[reportCallIssue]
+        )
+
+        service_client = tinker.ServiceClient.return_value  # pyright: ignore[reportAttributeAccessIssue]
+        service_client.create_sampling_client.assert_called_once_with(
+            model_path="tinker://run-1/weights/100"
+        )
+
+    def test_uses_base_model_when_no_model_path(self, mocker: MockerFixture) -> None:
+        _mock_init(mocker)
+        model_api.TinkerSamplingAPI(model_name="Qwen/Qwen3-8B")
+
+        service_client = tinker.ServiceClient.return_value  # pyright: ignore[reportAttributeAccessIssue]
+        service_client.create_sampling_client.assert_called_once_with(
+            base_model="Qwen/Qwen3-8B"
+        )
+
+    def test_uses_explicit_renderer_name(self, mocker: MockerFixture) -> None:
+        _mock_init(mocker)
+        get_renderer = mocker.patch(
+            "inspect_tinker_bridge.model_api.renderers.get_renderer",
+            return_value=FakeRenderer(),
+        )
+        model_api.TinkerSamplingAPI(
+            model_name="test/model",
+            renderer_name="qwen3",  # pyright: ignore[reportCallIssue]
+        )
+
+        get_renderer.assert_called_once()
+        assert get_renderer.call_args[0][0] == "qwen3"
+
+    def test_auto_detects_renderer_name(self, mocker: MockerFixture) -> None:
+        _mock_init(mocker)
+        get_recommended = mocker.patch(
+            "inspect_tinker_bridge.model_api.model_info.get_recommended_renderer_name",
+            return_value="deepseekv3",
+        )
+        get_renderer = mocker.patch(
+            "inspect_tinker_bridge.model_api.renderers.get_renderer",
+            return_value=FakeRenderer(),
+        )
+        model_api.TinkerSamplingAPI(model_name="deepseek/DeepSeek-V3")
+
+        get_recommended.assert_called_once_with("deepseek/DeepSeek-V3")
+        assert get_renderer.call_args[0][0] == "deepseekv3"

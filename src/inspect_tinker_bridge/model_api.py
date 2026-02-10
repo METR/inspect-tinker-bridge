@@ -18,7 +18,7 @@ from inspect_ai.model._model import ModelAPI
 from inspect_ai.model._model_output import StopReason
 from inspect_ai.model._registry import modelapi
 from inspect_ai.tool import ToolCall as InspectToolCall, ToolChoice, ToolInfo
-from tinker_cookbook import renderers
+from tinker_cookbook import model_info, renderers
 from tinker_cookbook.renderers import Message, ToolSpec
 
 from inspect_tinker_bridge import utils
@@ -88,12 +88,17 @@ def _map_stop_reason(
 class TinkerSamplingAPI(ModelAPI):
     """Inspect AI ModelAPI that uses Tinker's sampling endpoint.
 
-    Usage:
-        model = get_model(
-            "tinker_sampling/Qwen/Qwen3-8B",
-            renderer=renderer,
-            sampling_client=sampling_client,
-        )
+    Usage (CLI):
+        inspect eval task.py -m tinker_sampling/Qwen/Qwen3-8B
+        inspect eval task.py -m tinker_sampling/openai/gpt-oss-120b -M model_path=tinker://run-id/sampler_weights/000100
+
+    Usage (programmatic):
+        model = get_model("tinker_sampling/Qwen/Qwen3-8B")
+        model = get_model("tinker_sampling/Qwen/Qwen3-8B", model_path="tinker://...")
+
+    model_args:
+        model_path: tinker path to finetuned checkpoint. If omitted, uses model_name as base model.
+        renderer_name: override auto-detected renderer name. If omitted, auto-detected from model_name.
     """
 
     def __init__(
@@ -106,8 +111,26 @@ class TinkerSamplingAPI(ModelAPI):
         **model_args: Any,
     ) -> None:
         super().__init__(model_name, base_url, api_key, api_key_vars, config)
-        self.renderer: renderers.Renderer = model_args["renderer"]
-        self.sampling_client: tinker.SamplingClient = model_args["sampling_client"]
+
+        model_path: str | None = model_args.get("model_path")
+        renderer_name: str | None = model_args.get("renderer_name")
+
+        service_client = tinker.ServiceClient()
+
+        self.sampling_client: tinker.SamplingClient = (
+            service_client.create_sampling_client(model_path=model_path)
+            if model_path
+            else service_client.create_sampling_client(base_model=model_name)
+        )
+
+        tokenizer = self.sampling_client.get_tokenizer()
+
+        if renderer_name is None:
+            renderer_name = model_info.get_recommended_renderer_name(model_name)
+
+        self.renderer: renderers.Renderer = renderers.get_renderer(
+            renderer_name, tokenizer
+        )
 
     async def generate(
         self,
