@@ -34,7 +34,7 @@ class TestToolInfoToToolSpec:
                     description="Run a bash command",
                     parameters=ToolParams(
                         type="object",
-                        properties={
+                        properties={  # pyright: ignore[reportArgumentType]
                             "command": {"type": "string", "description": "The command"}
                         },
                         required=["command"],
@@ -248,8 +248,8 @@ def _make_api(
         sampling_client.sample_async.return_value = _make_sample_response()
     return model_api.TinkerSamplingAPI(
         model_name=model_name,
-        renderer=renderer,
-        sampling_client=sampling_client,
+        renderer=renderer,  # pyright: ignore[reportCallIssue]
+        sampling_client=sampling_client,  # pyright: ignore[reportCallIssue]
     )
 
 
@@ -273,13 +273,13 @@ class TestTinkerSamplingAPIGenerate:
             config=GenerateConfig(max_tokens=100),
         )
 
-        assert result.choices[0].message.content == "The answer is 4"
-        assert result.choices[0].stop_reason == "stop"
-        assert result.usage is not None
-        assert result.usage.input_tokens == 15
-        assert result.usage.output_tokens == 5
-        assert result.usage.total_tokens == 20
-        assert result.model == "test/model"
+        assert result.choices[0].message.content == "The answer is 4"  # pyright: ignore[reportAttributeAccessIssue]
+        assert result.choices[0].stop_reason == "stop"  # pyright: ignore[reportAttributeAccessIssue]
+        assert result.usage is not None  # pyright: ignore[reportAttributeAccessIssue]
+        assert result.usage.input_tokens == 15  # pyright: ignore[reportAttributeAccessIssue]
+        assert result.usage.output_tokens == 5  # pyright: ignore[reportAttributeAccessIssue]
+        assert result.usage.total_tokens == 20  # pyright: ignore[reportAttributeAccessIssue]
+        assert result.model == "test/model"  # pyright: ignore[reportAttributeAccessIssue]
 
     @pytest.mark.asyncio
     async def test_tool_injection(self) -> None:
@@ -293,7 +293,7 @@ class TestTinkerSamplingAPIGenerate:
             description="Run bash",
             parameters=ToolParams(
                 type="object",
-                properties={"command": {"type": "string"}},
+                properties={"command": {"type": "string"}},  # pyright: ignore[reportArgumentType]
                 required=["command"],
             ),
         )
@@ -407,8 +407,8 @@ class TestTinkerSamplingAPIGenerate:
             config=GenerateConfig(),
         )
 
-        assert result.choices[0].stop_reason == "tool_calls"
-        assert result.choices[0].message.tool_calls is not None
+        assert result.choices[0].stop_reason == "tool_calls"  # pyright: ignore[reportAttributeAccessIssue]
+        assert result.choices[0].message.tool_calls is not None  # pyright: ignore[reportAttributeAccessIssue]
 
     @pytest.mark.asyncio
     async def test_renderer_not_implemented_tools(self) -> None:
