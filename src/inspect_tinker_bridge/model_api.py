@@ -15,7 +15,7 @@ from inspect_ai.model import (
     ModelUsage,
 )
 from inspect_ai.model._model import ModelAPI
-from inspect_ai.model._model_output import StopReason
+from inspect_ai.model._model_output import StopReason, as_stop_reason
 from inspect_ai.model._registry import modelapi
 from inspect_ai.tool import ToolCall as InspectToolCall, ToolChoice, ToolInfo
 from tinker_cookbook import model_info, renderers
@@ -79,11 +79,9 @@ def _map_stop_reason(
     tool_calls: list[InspectToolCall] | None,
 ) -> StopReason:
     """Map Tinker stop reason to Inspect stop reason."""
-    if tinker_reason == "length":
-        return "max_tokens"
     if tool_calls:
         return "tool_calls"
-    return "stop"
+    return as_stop_reason(tinker_reason)
 
 
 @modelapi("tinker_sampling")
