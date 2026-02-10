@@ -8,7 +8,6 @@ from inspect_tinker_bridge.env import (
     InspectRLDataset,
 )
 from inspect_tinker_bridge.loader import load_environment
-from inspect_tinker_bridge.model_api import TinkerSamplingAPI
 from inspect_tinker_bridge.rollout_saving import RolloutRewardFnSig, with_rollout_saving
 from inspect_tinker_bridge.sandbox import SandboxConfig, SandboxInstance
 from inspect_tinker_bridge.tasks import InspectTaskInfo, load_inspect_task
@@ -26,5 +25,4 @@ __all__ = [
     "with_rollout_saving",
     "RolloutRewardFnSig",
     "BUILT_IN_TOOL_SPECS",
-    "TinkerSamplingAPI",
 ]
