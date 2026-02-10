@@ -58,4 +58,4 @@ allowedUntypedLibraries = [
 
 [tool.uv.sources]
 tinker-cookbook = { git = "https://github.com/METR/tinker-cookbook", branch = "main" }
-inspect-k8s-sandbox = { git = "https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox.git" }
+inspect-k8s-sandbox = { git = "https://github.com/METR/inspect_k8s_sandbox.git", rev = "95254cdc905ddabcaecd741c11b1791ac3482f76" }
