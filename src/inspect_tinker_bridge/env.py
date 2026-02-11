@@ -19,6 +19,7 @@ from typing import Literal, cast
 import tinker
 from datasets import Dataset as HFDataset
 from inspect_ai.scorer import Scorer
+from inspect_ai.util import OutputLimitExceededError
 from tinker_cookbook.completers import StopCondition
 from tinker_cookbook.rl import types
 from tinker_cookbook.renderers import Message, Renderer, ToolCall as TinkerToolCall
@@ -71,6 +72,29 @@ def _tool_error_message(tool_id: str, tool_name: str, error: str) -> Message:
     return Message(
         role="tool", content=f"Error: {error}", tool_call_id=tool_id, name=tool_name
     )
+
+
+def _sandbox_error_msg(
+    exc: Exception, timeout: int, tool_name: str, max_tool_output: int
+) -> str:
+    """Map a sandbox execution exception to a model-facing error string."""
+    match exc:
+        case TimeoutError():
+            return (
+                f"Command timed out after {timeout} seconds. "
+                "Use the set_timeout tool to increase the timeout if needed."
+            )
+        case PermissionError():
+            return f"Permission denied: {exc}"
+        case UnicodeDecodeError():
+            return f"Failed to decode command output: {exc}"
+        case OutputLimitExceededError(truncated_output=output) if output:
+            output = truncation.truncate_tool_output(output, tool_name, max_tool_output)
+            return f"Command output exceeded sandbox limit. Truncated output:\n{output}"
+        case OutputLimitExceededError():
+            return f"Command output exceeded size limit: {exc}"
+        case _:
+            return f"Sandbox error: {exc}"
 
 
 class InspectEnv(types.Env):
@@ -343,11 +367,26 @@ class InspectEnv(types.Env):
                     cmd = ["python", "-c", str(args_dict["code"])]
 
                 if self.sandbox_instance:
-                    exec_result = await sandbox_module.exec_in_sandbox(
-                        self.sandbox_instance.environments,
-                        cmd,
-                        timeout=self._current_tool_timeout,
-                    )
+                    try:
+                        exec_result = await sandbox_module.exec_in_sandbox(
+                            self.sandbox_instance.environments,
+                            cmd,
+                            timeout=self._current_tool_timeout,
+                        )
+                    except (
+                        TimeoutError,
+                        PermissionError,
+                        UnicodeDecodeError,
+                        OutputLimitExceededError,
+                    ) as e:
+                        msg = _sandbox_error_msg(
+                            e,
+                            self._current_tool_timeout,
+                            tool_name,
+                            self.max_tool_output,
+                        )
+                        results.append(_tool_error_message(tool_id, tool_name, msg))
+                        continue
                     output = exec_result.stdout or ""
                     if exec_result.stderr:
                         output = f"{output}\nstderr: {exec_result.stderr}"

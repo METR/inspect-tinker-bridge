@@ -6,6 +6,7 @@ from typing import Any, Literal
 import pytest
 from datasets import Dataset as HFDataset
 from inspect_ai.scorer import Scorer
+from inspect_ai.util import OutputLimitExceededError
 from pytest_mock import MockerFixture
 from tinker_cookbook.renderers import (
     Message,
@@ -911,3 +912,157 @@ class TestToolOutputTruncation:
         assert isinstance(builder, env.InspectEnvGroupBuilder)
         created_env = builder.env_thunk()
         assert created_env.max_tool_output == 8192
+
+
+class TestSandboxExecErrorHandling:
+    """Tests that sandbox execution errors are returned to the model, not raised."""
+
+    def _make_env(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        mocker: MockerFixture,
+    ) -> env.InspectEnv:
+        e = env.InspectEnv(
+            sample_info=sample_info,
+            prompt_messages=prompt_messages,
+            answer="4",
+            renderer=FakeRenderer(),  # type: ignore[arg-type]
+            scorers=[],
+            env_type="multi_turn",
+        )
+        e.sandbox_instance = mocker.MagicMock()
+        e.sandbox_instance.environments = {"default": mocker.MagicMock()}
+        return e
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("exception", "expected_fragment"),
+        [
+            pytest.param(
+                TimeoutError(),
+                "Command timed out after",
+                id="timeout",
+            ),
+            pytest.param(
+                PermissionError("cannot execute"),
+                "Permission denied: cannot execute",
+                id="permission",
+            ),
+            pytest.param(
+                UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid byte"),
+                "Failed to decode command output",
+                id="unicode_decode",
+            ),
+            pytest.param(
+                OutputLimitExceededError("10 MiB", None),
+                "Command output exceeded size limit",
+                id="output_limit_no_content",
+            ),
+            pytest.param(
+                OutputLimitExceededError("10 MiB", "partial stdout here"),
+                "Command output exceeded sandbox limit",
+                id="output_limit_with_content",
+            ),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "tool_name",
+        [
+            pytest.param("bash", id="bash"),
+            pytest.param("python", id="python"),
+        ],
+    )
+    async def test_exec_error_returned_as_tool_error(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        mocker: MockerFixture,
+        exception: Exception,
+        expected_fragment: str,
+        tool_name: str,
+    ) -> None:
+        e = self._make_env(sample_info, prompt_messages, mocker)
+        mocker.patch.object(sandbox_module, "exec_in_sandbox", side_effect=exception)
+
+        args_key = "command" if tool_name == "bash" else "code"
+        tc = _make_tool_call(tool_name, f'{{"{args_key}": "echo hi"}}')
+        results = await e._execute_tools([tc])
+
+        assert len(results) == 1
+        assert results[0]["role"] == "tool"
+        content = results[0]["content"]
+        assert isinstance(content, str)
+        assert content.startswith("Error: ")
+        assert expected_fragment in content
+
+    @pytest.mark.asyncio
+    async def test_timeout_error_suggests_set_timeout(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        mocker: MockerFixture,
+    ) -> None:
+        """Timeout message tells the model how to fix it."""
+        e = self._make_env(sample_info, prompt_messages, mocker)
+        e._current_tool_timeout = 120
+        mocker.patch.object(
+            sandbox_module, "exec_in_sandbox", side_effect=TimeoutError()
+        )
+
+        tc = _make_tool_call("bash", '{"command": "sleep 999"}')
+        results = await e._execute_tools([tc])
+
+        content = results[0]["content"]
+        assert isinstance(content, str)
+        assert "120 seconds" in content
+        assert "set_timeout" in content
+
+    @pytest.mark.asyncio
+    async def test_output_limit_includes_truncated_content(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        mocker: MockerFixture,
+    ) -> None:
+        """OutputLimitExceededError surfaces the truncated output to the model."""
+        e = self._make_env(sample_info, prompt_messages, mocker)
+        mocker.patch.object(
+            sandbox_module,
+            "exec_in_sandbox",
+            side_effect=OutputLimitExceededError("10 MiB", "first 100 bytes of output"),
+        )
+
+        tc = _make_tool_call("bash", '{"command": "cat huge_file"}')
+        results = await e._execute_tools([tc])
+
+        content = results[0]["content"]
+        assert isinstance(content, str)
+        assert "first 100 bytes of output" in content
+        assert "exceeded sandbox limit" in content
+
+    @pytest.mark.asyncio
+    async def test_exec_error_does_not_block_subsequent_tools(
+        self,
+        sample_info: SampleInfoDict,
+        prompt_messages: list[MessageDict],
+        mocker: MockerFixture,
+    ) -> None:
+        """An error on one tool call doesn't prevent processing the next."""
+        e = self._make_env(sample_info, prompt_messages, mocker)
+        mocker.patch.object(
+            sandbox_module,
+            "exec_in_sandbox",
+            side_effect=[
+                TimeoutError(),
+                mocker.MagicMock(stdout="ok", stderr=""),
+            ],
+        )
+
+        tc_fail = _make_tool_call("bash", '{"command": "slow"}', tool_id="tc_0")
+        tc_ok = _make_tool_call("bash", '{"command": "echo hi"}', tool_id="tc_1")
+        results = await e._execute_tools([tc_fail, tc_ok])
+
+        assert len(results) == 2
+        assert "Error: " in results[0]["content"]
+        assert results[1]["content"] == "ok"
