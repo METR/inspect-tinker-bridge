@@ -5,10 +5,14 @@ This module provides utilities to create and manage sandbox environments
 that can be used during reward computation in RL training.
 """
 
+import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from typing import Any, cast
+
+import pydantic
 
 from inspect_ai._eval.task.sandbox import read_sandboxenv_file, resolve_sample_files
 from inspect_ai.util import ExecResult
@@ -19,7 +23,10 @@ from inspect_ai.util._sandbox.context import (
     sandbox_environments_context_var,
     sandbox_with_environments_context_var,
 )
-from inspect_ai.util._sandbox.environment import SandboxEnvironment
+from inspect_ai.util._sandbox.environment import (
+    SandboxEnvironment,
+    deserialize_sandbox_specific_config,
+)
 from inspect_ai.util._sandbox.registry import registry_find_sandboxenv
 
 from inspect_tinker_bridge.types import SampleInfoDict, parse_metadata_json
@@ -50,7 +57,7 @@ class SandboxConfig:
     """Configuration for sandbox creation."""
 
     sandbox_type: str = "docker"
-    config: str | None = None
+    config: pydantic.BaseModel | str | None = None
     timeout: int = 120
 
 
@@ -60,8 +67,35 @@ class SandboxInstance:
 
     environments: dict[str, SandboxEnvironment]
     sandbox_type: str
-    config: str | None
+    config: pydantic.BaseModel | str | None
     task_name: str
+
+
+def _deserialize_config(
+    sandbox_type: str, config: str | None
+) -> pydantic.BaseModel | str | None:
+    """Deserialize config from HF dataset format.
+
+    JSON dicts are deserialized back to pydantic.BaseModel via the sandbox plugin's
+    config_deserialize(). Plain file paths are returned as-is.
+    """
+    if config is None:
+        return None
+    try:
+        parsed = json.loads(config)
+    except json.JSONDecodeError:
+        return config  # plain file path
+    if not isinstance(parsed, dict):
+        return config
+    result = deserialize_sandbox_specific_config(
+        sandbox_type, cast(dict[str, Any], parsed)
+    )
+    if not isinstance(result, pydantic.BaseModel):
+        raise ValueError(
+            f"Failed to deserialize config for sandbox type '{sandbox_type}': "
+            f"plugin returned {type(result).__name__} instead of pydantic.BaseModel"
+        )
+    return result
 
 
 async def create_sandbox_for_sample(
@@ -85,19 +119,20 @@ async def create_sandbox_for_sample(
     sample_id = sample_info["inspect_sample_id"]
 
     # Determine effective sandbox config: per-sample overrides task-level
-    per_sample_sandbox = sample_info.get("inspect_sandbox")
+    per_sample_sandbox = sample_info["inspect_sandbox"]
 
     effective_config: SandboxConfig
     if per_sample_sandbox is not None:
-        # Per-sample sandbox: (type, config) tuple
-        sandbox_type, config_path = per_sample_sandbox
+        # Per-sample sandbox: (type, config_str) tuple from HF dataset
+        sandbox_type, config_str = per_sample_sandbox
+        deserialized_config = _deserialize_config(sandbox_type, config_str)
         effective_config = SandboxConfig(
             sandbox_type=sandbox_type,
-            config=config_path,
+            config=deserialized_config,
             timeout=sandbox_init_timeout,
         )
         logger.debug(
-            f"Using per-sample sandbox for {sample_id}: type={sandbox_type}, config={config_path}"
+            f"Using per-sample sandbox for {sample_id}: type={sandbox_type}, config={config_str}"
         )
     elif task_sandbox_config is not None:
         effective_config = task_sandbox_config
@@ -137,8 +172,7 @@ async def create_sandbox_for_sample(
         setup_bytes = await read_sandboxenv_file(setup)
 
     # Get metadata (JSON-serialized in dataset.py for pyarrow compatibility)
-    metadata_raw = sample_info.get("inspect_metadata", "{}")
-    metadata = parse_metadata_json(metadata_raw)
+    metadata = parse_metadata_json(sample_info["inspect_metadata"])
 
     # Initialize sandbox environments
     logger.debug(f"Initializing sandbox environments for sample {sample_id}")

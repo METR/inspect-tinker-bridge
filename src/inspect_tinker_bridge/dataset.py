@@ -11,6 +11,7 @@ from collections.abc import Coroutine
 from concurrent import futures
 from typing import TypeVar
 
+import pydantic
 from datasets import Dataset as HFDataset
 from inspect_ai import Task
 from inspect_ai.dataset import Sample
@@ -78,14 +79,16 @@ async def sample_to_row(
     # SandboxEnvironmentSpec is the normalized form at runtime
     sandbox_serializable: tuple[str, str | None] | None = None
     if sample.sandbox is not None:
-        # sample.sandbox is always SandboxEnvironmentSpec (Inspect normalizes on creation)
-        config = sample.sandbox.config
-        if config is not None and not isinstance(config, str):
-            raise ValueError(
-                f"Only string sandbox configs (file paths) are supported for serialization, "
-                f"got {type(config).__name__}. BaseModel configs are not yet supported."
-            )
-        sandbox_serializable = (sample.sandbox.type, config)
+        # sample.sandbox.config is typed as Any upstream (SandboxEnvironmentSpec uses
+        # Annotated[Any, ...] to prevent Pydantic auto-init), but at runtime it's
+        # always pydantic.BaseModel | str | None. Annotate locally for type safety.
+        raw_config: pydantic.BaseModel | str | None = sample.sandbox.config
+        config_serialized: str | None
+        if isinstance(raw_config, pydantic.BaseModel):
+            config_serialized = raw_config.model_dump_json()
+        else:
+            config_serialized = raw_config
+        sandbox_serializable = (sample.sandbox.type, config_serialized)
 
     info: SampleInfoDict = {
         "inspect_sample_id": sample.id,

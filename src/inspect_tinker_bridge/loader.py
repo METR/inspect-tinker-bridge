@@ -6,6 +6,7 @@ import logging
 from collections.abc import Callable
 from typing import Literal
 
+import pydantic
 from inspect_ai import Task
 from tinker_cookbook.renderers import Renderer
 
@@ -31,7 +32,7 @@ def load_environment(
     shuffle: bool = False,
     shuffle_seed: int | None = None,
     sandbox_type: str | None = None,
-    sandbox_config: str | None = None,
+    sandbox_config: pydantic.BaseModel | str | None = None,
     sandbox_init_timeout: int = 120,
     tool_timeout: int = DEFAULT_TOOL_TIMEOUT,
     max_tool_output: int = truncation.DEFAULT_MAX_TOOL_OUTPUT,
@@ -58,7 +59,7 @@ def load_environment(
         shuffle: Whether to shuffle dataset indices per epoch (default: False)
         shuffle_seed: Seed for shuffle RNG. If None, uses 0 when shuffle=True.
         sandbox_type: Override sandbox type (e.g., "docker", "local")
-        sandbox_config: Sandbox configuration file path
+        sandbox_config: Sandbox configuration (file path or pydantic.BaseModel config)
         sandbox_init_timeout: Timeout in seconds for sandbox init operations (default: 120)
         tool_timeout: Default per-tool execution timeout in seconds (default: 1800).
             Agents can override this at runtime via the set_timeout tool.

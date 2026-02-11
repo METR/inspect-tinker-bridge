@@ -2,6 +2,7 @@
 
 import json
 
+import pydantic
 import pytest
 from inspect_ai import Task
 from inspect_ai.dataset import Sample
@@ -10,6 +11,11 @@ from inspect_ai.solver import generate
 from inspect_ai.util import SandboxEnvironmentSpec
 
 from inspect_tinker_bridge.dataset import sample_to_row
+
+
+class _StubSandboxConfig(pydantic.BaseModel):
+    image: str = "python:3.12"
+    replicas: int = 1
 
 
 @pytest.fixture
@@ -43,6 +49,14 @@ class TestSampleSandboxSerialization:
                 SandboxEnvironmentSpec(type="local", config=None),
                 ("local", None),
                 id="local_sandbox",
+            ),
+            pytest.param(
+                SandboxEnvironmentSpec(
+                    type="k8s",
+                    config=_StubSandboxConfig(image="python:3.12", replicas=2),
+                ),
+                ("k8s", '{"image":"python:3.12","replicas":2}'),
+                id="basemodel_config",
             ),
         ],
     )
