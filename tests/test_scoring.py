@@ -5,6 +5,7 @@ import math
 from collections.abc import Callable
 
 import pytest
+from inspect_ai.model import ChatMessageAssistant, ContentReasoning, ContentText
 from pytest_mock import MockerFixture
 
 from inspect_tinker_bridge import scoring
@@ -13,6 +14,8 @@ from inspect_tinker_bridge.types import (
     MessageDict,
     SampleInfoDict,
     ScoringContext,
+    ToolCallDict,
+    ToolCallFunctionDict,
 )
 
 
@@ -300,6 +303,91 @@ class TestComputeRewardWithCustomFn:
 
         assert reward == 0.8
         assert metrics == {"fake_scorer_0": 0.8}
+
+
+class TestBuildInspectMessages:
+    """Tests for _build_inspect_messages."""
+
+    def test_reasoning_content_produces_content_reasoning(self) -> None:
+        """Reasoning content from MessageDict should appear as ContentReasoning."""
+        messages = [
+            MessageDict(
+                role="assistant",
+                content="visible answer",
+                reasoning_content="thinking about the problem step by step",
+            ),
+        ]
+
+        result = scoring._build_inspect_messages(messages)
+
+        assert len(result) == 1
+        msg = result[0]
+        assert isinstance(msg.content, list)
+
+        reasoning_parts = [p for p in msg.content if isinstance(p, ContentReasoning)]
+        text_parts = [p for p in msg.content if isinstance(p, ContentText)]
+
+        assert len(reasoning_parts) == 1
+        assert reasoning_parts[0].reasoning == "thinking about the problem step by step"
+        assert len(text_parts) == 1
+        assert text_parts[0].text == "visible answer"
+
+    @pytest.mark.parametrize(
+        "messages",
+        [
+            pytest.param(
+                [MessageDict(role="assistant", content="visible text")],
+                id="reasoning_absent",
+            ),
+            pytest.param(
+                [
+                    MessageDict(
+                        role="assistant", content="visible text", reasoning_content=""
+                    )
+                ],
+                id="reasoning_empty_string",
+            ),
+        ],
+    )
+    def test_no_reasoning_stays_string(self, messages: list[MessageDict]) -> None:
+        """Assistant messages without meaningful reasoning_content keep plain string content."""
+        result = scoring._build_inspect_messages(messages)
+
+        assert len(result) == 1
+        assert isinstance(result[0].content, str)
+        assert result[0].content == "visible text"
+
+    def test_reasoning_with_tool_calls(self) -> None:
+        """Reasoning + tool_calls should both be present on the resulting message."""
+        messages = [
+            MessageDict(
+                role="assistant",
+                content="I'll run the code",
+                reasoning_content="need to compute the answer",
+                tool_calls=[
+                    ToolCallDict(
+                        id="tc_0",
+                        type="function",
+                        function=ToolCallFunctionDict(
+                            name="python",
+                            arguments='{"code": "print(42)"}',
+                        ),
+                    )
+                ],
+            ),
+        ]
+
+        result = scoring._build_inspect_messages(messages)
+
+        assert len(result) == 1
+        msg = result[0]
+        assert isinstance(msg.content, list)
+        assert any(isinstance(p, ContentReasoning) for p in msg.content)
+        assert any(isinstance(p, ContentText) for p in msg.content)
+        assert isinstance(msg, ChatMessageAssistant)
+        assert msg.tool_calls is not None
+        assert len(msg.tool_calls) == 1
+        assert msg.tool_calls[0].function == "python"
 
 
 class TestRunInspectScorer:

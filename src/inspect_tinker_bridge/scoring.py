@@ -18,6 +18,8 @@ from inspect_ai.model import (
     ChatMessageSystem,
     ChatMessageTool,
     ChatMessageUser,
+    ContentReasoning,
+    ContentText,
     ModelOutput,
 )
 from inspect_ai.scorer import Score, Scorer, Target, value_to_float
@@ -373,7 +375,21 @@ def _build_inspect_messages(messages: list[MessageDict]) -> list[ChatMessage]:
                     )
                     for i, tc in enumerate(msg["tool_calls"])
                 ]
-            result.append(ChatMessageAssistant(content=content, tool_calls=tool_calls))
+            reasoning = msg.get("reasoning_content")
+            if reasoning:
+                result.append(
+                    ChatMessageAssistant(
+                        content=[
+                            ContentReasoning(reasoning=reasoning),
+                            ContentText(text=content),
+                        ],
+                        tool_calls=tool_calls,
+                    )
+                )
+            else:
+                result.append(
+                    ChatMessageAssistant(content=content, tool_calls=tool_calls)
+                )
         elif role == "tool":
             result.append(
                 ChatMessageTool(
