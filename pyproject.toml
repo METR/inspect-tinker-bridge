@@ -23,8 +23,8 @@ inspect-tinker-bridge = "inspect_tinker_bridge:main"
 tinker_sampling = "inspect_tinker_bridge._registry"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.9.16,<0.10.0"]
+build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
@@ -58,4 +58,4 @@ allowedUntypedLibraries = [
 
 [tool.uv.sources]
 tinker-cookbook = { git = "https://github.com/METR/tinker-cookbook", branch = "main" }
-inspect-k8s-sandbox = { git = "https://github.com/METR/inspect_k8s_sandbox.git"}
+inspect-k8s-sandbox = { git = "https://github.com/METR/inspect_k8s_sandbox.git", rev = "1f8f74f675a91ea4e9a2253312b3743e9262628c" }
