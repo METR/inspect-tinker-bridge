@@ -23,8 +23,8 @@ inspect-tinker-bridge = "inspect_tinker_bridge:main"
 tinker_sampling = "inspect_tinker_bridge._registry"
 
 [build-system]
-requires = ["uv_build>=0.9.16,<0.10.0"]
-build-backend = "uv_build"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
