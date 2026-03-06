@@ -932,7 +932,7 @@ wheels = [
 [[package]]
 name = "inspect-k8s-sandbox"
 version = "0.4.0"
-source = { git = "https://github.com/METR/inspect_k8s_sandbox.git#0c59ae6a9bc4cfb65a574ccc857ef565bdcbe287" }
+source = { git = "https://github.com/METR/inspect_k8s_sandbox.git?rev=872db905e174e76c1d1905c6efcba3617fe3ecc9#872db905e174e76c1d1905c6efcba3617fe3ecc9" }
 dependencies = [
     { name = "inspect-ai" },
     { name = "jsonschema" },
@@ -967,7 +967,7 @@ requires-dist = [
     { name = "datasets", specifier = ">=3.1.0" },
     { name = "inspect-ai", specifier = "~=0.3.158" },
     { name = "inspect-evals", specifier = ">=0.3.102" },
-    { name = "inspect-k8s-sandbox", git = "https://github.com/METR/inspect_k8s_sandbox.git" },
+    { name = "inspect-k8s-sandbox", git = "https://github.com/METR/inspect_k8s_sandbox.git?rev=872db905e174e76c1d1905c6efcba3617fe3ecc9" },
     { name = "tinker", specifier = ">=0.7.0" },
     { name = "tinker-cookbook", extras = ["rollout-viewer"], git = "https://github.com/METR/tinker-cookbook?branch=main" },
 ]
