@@ -2,6 +2,8 @@
 Utility functions and constants for the Inspect-Tinker bridge.
 """
 
+import json
+
 from inspect_ai.model import (
     ChatMessage,
     ChatMessageAssistant,
@@ -62,7 +64,7 @@ def chat_message_to_tinker(msg: ChatMessage) -> Message:
                             name=tc.function,
                             arguments=tc.arguments
                             if isinstance(tc.arguments, str)
-                            else str(tc.arguments),
+                            else json.dumps(tc.arguments),
                         ),
                         id=tc.id,
                     )
@@ -106,7 +108,7 @@ def chat_message_to_dict(msg: ChatMessage) -> MessageDict:
                             "name": tc.function,
                             "arguments": tc.arguments
                             if isinstance(tc.arguments, str)
-                            else str(tc.arguments),
+                            else json.dumps(tc.arguments),
                         },
                     )
                     for tc in tool_calls

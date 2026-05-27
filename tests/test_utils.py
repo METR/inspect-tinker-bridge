@@ -1,5 +1,6 @@
 """Tests for utils module."""
 
+import json
 import pytest
 from inspect_ai.model import (
     ChatMessageAssistant,
@@ -77,8 +78,21 @@ class TestChatMessageToDict:
         tc = tool_calls[0]
         assert tc["id"] == "call_123"
         assert tc["function"]["name"] == "bash"
-        # arguments converted to str representation
-        assert tc["function"]["arguments"] == "{'command': 'echo hello'}"
+        assert tc["function"]["arguments"] == json.dumps({"command": "echo hello"})
+
+    def test_tool_call_arguments_are_json_serialized(self) -> None:
+        """Test tool call arguments are serialized as JSON."""
+        arguments = {"k": "v with 'quotes'"}
+        tool_call = ToolCall(
+            id="call_123",
+            function="bash",
+            arguments=arguments,
+            type="function",
+        )
+        msg = ChatMessageAssistant(content="Running command.", tool_calls=[tool_call])
+        result = utils.chat_message_to_dict(msg)
+
+        assert result["tool_calls"][0]["function"]["arguments"] == json.dumps(arguments)
 
     def test_tool_message(self) -> None:
         """Test conversion of tool response message."""
@@ -118,6 +132,20 @@ class TestChatMessageToTinker:
         assert result["role"] == "tool"
         assert result.get("tool_call_id") == "abc"
         assert result.get("name") == "test_func"
+
+    def test_tool_call_arguments_are_json_serialized(self) -> None:
+        """Test tool call arguments are serialized as JSON."""
+        arguments = {"k": "v with 'quotes'"}
+        tool_call = ToolCall(
+            id="call_123",
+            function="bash",
+            arguments=arguments,
+            type="function",
+        )
+        msg = ChatMessageAssistant(content="Running command.", tool_calls=[tool_call])
+        result = utils.chat_message_to_tinker(msg)
+
+        assert result["tool_calls"][0].function.arguments == json.dumps(arguments)
 
 
 class TestChatMessagesToTinker:
